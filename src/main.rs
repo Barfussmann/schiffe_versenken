@@ -67,7 +67,7 @@ impl Display for ShipCounts {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Ship {
     length: usize,
 }
@@ -81,17 +81,25 @@ impl Ship {
 fn main() {
     loop {
         let start_time = Instant::now();
+        let ship_count = 24_000_000;
 
-        let ship_counts = (0..25_000_000)
+        let iterations = ship_count / 2usize.pow(SHIPS.len() as u32);
+
+        // let ship_counts = (0..1)
+        // let ship_counts = (0..iterations)
+        let ship_counts = (0..13_000_000)
             .into_par_iter()
-            .map(|_| {
+            .fold(ShipCounts::new, |mut ship_counts, _| {
+                let mut board = Board::new();
+                // let rng = &mut thread_rng();
+                let rng = &mut fastrand::Rng::new();
+                // board.place_all_ships_random_recursive(SHIPS, &mut ship_counts, rng);
+                // board.place_all_ships_recursive(0, 0, SHIPS, &mut ship_counts);
+
                 let mut board = Board::new();
                 for ship in SHIPS {
-                    board.random_place_ship(*ship);
+                    board.random_place_ship(*ship, rng);
                 }
-                board
-            })
-            .fold(ShipCounts::new, |mut ship_counts, board| {
                 ship_counts.add_board(board);
                 ship_counts
             })
@@ -106,7 +114,7 @@ fn main() {
         //     ship_counts.add_board(board);
         // }
         let elapsed_time = start_time.elapsed();
-        println!("25_000_000 took: {:?}", elapsed_time);
+        println!("{ship_count} took: {:?}", elapsed_time);
         println!("ship_counts: {}", ship_counts)
     }
 }

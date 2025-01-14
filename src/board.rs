@@ -1,7 +1,6 @@
-use rand::Rng;
-use rand::thread_rng;
-
+use crate::SHIPS;
 use crate::Ship;
+use crate::ShipCounts;
 
 use super::SIZE;
 
@@ -9,13 +8,13 @@ use std::fmt::Display;
 use std::fmt::Write;
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum Direction {
+pub enum Direction {
     Horizontal,
     Vetrical,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Cell {
+pub enum Cell {
     Ship,
     Protected,
     Water,
@@ -33,23 +32,23 @@ impl Display for Cell {
 }
 
 #[derive(Debug)]
-pub(crate) enum WasShipplacmentSuccsessfull {
+pub enum WasShipplacmentSuccsessfull {
     Yes,
     No,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct Board {
-    pub(crate) cells: [Cell; SIZE * SIZE],
+#[derive(Debug, Clone, Copy)]
+pub struct Board {
+    pub cells: [Cell; SIZE * SIZE],
 }
 
 impl Board {
-    pub(crate) fn new() -> Board {
+    pub fn new() -> Board {
         Board {
             cells: [Cell::Water; SIZE * SIZE],
         }
     }
-    pub(crate) fn place_ship(
+    pub fn place_ship(
         &mut self,
         mut x: usize,
         mut y: usize,
@@ -97,7 +96,7 @@ impl Board {
 
         WasShipplacmentSuccsessfull::Yes
     }
-    pub(crate) fn is_ship_allowed(
+    pub fn is_ship_allowed(
         &self,
         mut x: usize,
         mut y: usize,
@@ -118,7 +117,7 @@ impl Board {
         }
         true
     }
-    pub(crate) fn set_protected_rectangle(
+    pub fn set_protected_rectangle(
         &mut self,
         ship_left_x: usize,
         ship_top_y: usize,
@@ -145,37 +144,116 @@ impl Board {
             }
         }
     }
-    pub(crate) fn cell_index(x: usize, y: usize) -> usize {
+    pub fn cell_index(x: usize, y: usize) -> usize {
         x + y * SIZE
     }
+    pub fn place_all_ships_recursive(
+        &self,
+        start_x: usize,
+        start_y: usize,
+        ships: &[Ship],
+        ship_counts: &mut ShipCounts,
+    ) {
+        if ships.is_empty() {
+            ship_counts.add_board(*self);
+            return;
+        }
+        let (ship_to_place, remaining_ships) = ships.split_first().unwrap();
+        let next_ship_same = ship_to_place == remaining_ships.first().unwrap_or(&SHIPS[0]);
 
-    pub(crate) fn random_place_ship(&mut self, ship: Ship) {
-        let rng = &mut thread_rng();
-
-        loop {
-            let direction;
-            let x;
-            let y;
-            match rng.gen_bool(0.5) {
-                true => {
-                    direction = Direction::Horizontal;
-                    x = rng.gen_range(0..=SIZE - ship.length);
-                    y = rng.gen_range(0..SIZE);
+        let mut valid_boards = 0;
+        for direction in [Direction::Horizontal, Direction::Vetrical] {
+            let max_x;
+            let max_y;
+            match direction {
+                Direction::Horizontal => {
+                    max_x = SIZE - (ship_to_place.length - 1); // have to reduce by one because 1 length ships also need to be placed at the cornern
+                    max_y = SIZE;
                 }
-                false => {
-                    direction = Direction::Vetrical;
-                    x = rng.gen_range(0..SIZE);
-                    y = rng.gen_range(0..=SIZE - ship.length);
+                Direction::Vetrical => {
+                    max_x = SIZE;
+                    max_y = SIZE - (ship_to_place.length - 1); // have to reduce by one because 1 length ships also need to be placed at the cornern
                 }
-            };
+            }
+            for y in start_x..max_y {
+                for x in start_y..max_x {
+                    let mut me = *self;
+                    match me.place_ship(x, y, direction, *ship_to_place) {
+                        WasShipplacmentSuccsessfull::Yes => {
+                            if next_ship_same {
+                                me.place_all_ships_recursive(x, y, remaining_ships, ship_counts);
+                            } else {
+                                me.place_all_ships_recursive(0, 0, remaining_ships, ship_counts);
+                            }
 
-            // println!("x: {x}, y: {y}, direction: {:?}", direction);
-            let was_succsessfull = self.place_ship(x, y, direction, ship);
-            match was_succsessfull {
-                WasShipplacmentSuccsessfull::Yes => return,
-                WasShipplacmentSuccsessfull::No => {}
+                            valid_boards += 1;
+                        }
+                        WasShipplacmentSuccsessfull::No => {}
+                    };
+                    // me.place_all_ships_recursive(remaining_ships, ship_counts);
+                }
             }
         }
+        if ships.len() >= 6 {
+            println!("{}", self);
+            println!("{}", ships.len());
+            println!("{}", ship_counts.board_count);
+            println!("{}", valid_boards);
+        }
+    }
+    pub fn place_all_ships_random_recursive(
+        &mut self,
+        ships: &[Ship],
+        ship_counts: &mut ShipCounts,
+        rng: &mut fastrand::Rng,
+    ) {
+        if ships.is_empty() {
+            ship_counts.add_board(*self);
+            return;
+        }
+        let (ship_to_place, remaining_ships) = ships.split_first().unwrap();
+
+        let mut me = *self;
+        match me.try_radom_place_ship(*ship_to_place, rng) {
+            WasShipplacmentSuccsessfull::Yes => {
+                me.place_all_ships_random_recursive(remaining_ships, ship_counts, rng)
+            }
+            WasShipplacmentSuccsessfull::No => {}
+        }
+
+        match self.try_radom_place_ship(*ship_to_place, rng) {
+            WasShipplacmentSuccsessfull::Yes => {
+                self.place_all_ships_random_recursive(remaining_ships, ship_counts, rng)
+            }
+            WasShipplacmentSuccsessfull::No => {}
+        };
+    }
+    pub fn try_radom_place_ship(
+        &mut self,
+        ship: Ship,
+        rng: &mut fastrand::Rng,
+    ) -> WasShipplacmentSuccsessfull {
+        let direction;
+        let x;
+        let y;
+
+        match rng.bool() {
+            true => {
+                direction = Direction::Horizontal;
+                x = rng.u8(0..=(SIZE - ship.length) as u8) as usize;
+                y = rng.u8(0..(SIZE) as u8) as usize;
+            }
+            false => {
+                direction = Direction::Vetrical;
+                x = rng.u8(0..SIZE as u8) as usize;
+                y = rng.u8(0..=(SIZE - ship.length) as u8) as usize;
+            }
+        };
+
+        self.place_ship(x, y, direction, ship)
+    }
+    pub fn random_place_ship(&mut self, ship: Ship, rng: &mut fastrand::Rng) {
+        while let WasShipplacmentSuccsessfull::No = self.try_radom_place_ship(ship, rng) {}
     }
 }
 
