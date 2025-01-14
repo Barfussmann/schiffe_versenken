@@ -1,8 +1,9 @@
-use crate::SHIPS;
 use crate::Ship;
 use crate::ShipCounts;
+use crate::{BOARD_SIZE, SHIPS, SIZE};
 
-use super::SIZE;
+const PLACED_SHIPS: [[[[Board; SIZE]; SIZE];2]; 10]
+
 
 use std::fmt::Display;
 use std::fmt::Write;
@@ -38,14 +39,15 @@ pub enum WasShipplacmentSuccsessfull {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[repr(align(128))]
 pub struct Board {
-    pub cells: [Cell; SIZE * SIZE],
+    pub cells: [Cell; BOARD_SIZE],
 }
 
 impl Board {
     pub fn new() -> Board {
         Board {
-            cells: [Cell::Water; SIZE * SIZE],
+            cells: [Cell::Water; BOARD_SIZE],
         }
     }
     pub fn place_ship(
@@ -260,7 +262,7 @@ impl Board {
 impl Display for Board {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_char('\n')?;
-        for row in self.cells.chunks(SIZE) {
+        for row in self.cells.chunks(SIZE).take(SIZE) {
             for cell in row {
                 f.write_fmt(format_args!("{}", cell))?;
             }
