@@ -49,7 +49,8 @@ pub enum Direction {
 pub enum Cell {
     Water = 0,
     Protected = 1,
-    Ship = 2,
+    ShipHit = 2,
+    Ship = 3,
 }
 
 impl Display for Cell {
@@ -58,6 +59,7 @@ impl Display for Cell {
             Cell::Ship => " X ",
             Cell::Protected => " o ",
             Cell::Water => " _ ",
+            Cell::ShipHit => " X ",
         };
         f.write_str(str)
     }
@@ -177,7 +179,7 @@ impl Board {
 
         let mut is_placement_allowed = true;
         for (cell, placed_ship_cell) in zip(&mut self.cells, &placed_ship_board.cells) {
-            let cell_protects = (*cell as u8) > 0;
+            let cell_protects = *cell == Cell::Protected || *cell == Cell::Ship;
             if cell_protects && *placed_ship_cell == Cell::Ship {
                 is_placement_allowed = false;
             }
@@ -202,7 +204,7 @@ impl Board {
         for _ in 0..ship.length {
             let index = Self::cell_index(x, y);
 
-            if self.cells[index] != Cell::Water {
+            if self.cells[index] == Cell::Ship || self.cells[index] == Cell::Protected {
                 return false;
             }
 

@@ -27,8 +27,8 @@ const SHIPS: [Ship; 10] = [
 
 #[derive(Debug, Clone)]
 struct ShipCounts {
-    counts: [usize; BOARD_SIZE],
-    board_count: usize,
+    counts: [u64; BOARD_SIZE],
+    board_count: u64,
 }
 
 impl ShipCounts {
@@ -44,8 +44,7 @@ impl ShipCounts {
                 Cell::Ship => {
                     *count += 1;
                 }
-                Cell::Protected => {}
-                Cell::Water => {}
+                Cell::Protected | Cell::Water | Cell::ShipHit => {}
             }
         }
         self.board_count += 1;
@@ -103,36 +102,46 @@ impl BadRNG {
     }
 }
 
+const DIAGONAL_OFFSETS: [(i32, i32); 4] = [(-1, -1), (1, -1), (-1, 1), (1, 1)];
+const ORTHOGONAL_OFFSETS: [(i32, i32); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+
 fn main() {
     // rayon::ThreadPoolBuilder::new()
     //     .num_threads(1)
     //     .build_global()
     //     .unwrap();
+
+    let mut start_board = Board::new();
+    let mut start_ships = SHIPS.to_vec();
+    let target_ship_cell_count: usize = start_ships.iter().map(|ship| ship.length).sum();
     loop {
         let start_time = Instant::now();
-        // let ship_count = 90_000;
-        // let ship_count = 5_000_000;
-        let ship_count = 105_000_000;
+        // let ship_count = 50_000;
+        let ship_count = 5_000_000;
 
-        // let iterations = ship_count / 2usize.pow(SHIPS.len() as u32);
-        //
-        // let ship_counts = (0..1)
-        // let ship_counts = (0..iterations)
+        println!("target_ship_count: {target_ship_cell_count}");
         let ship_counts = (0..ship_count)
             .into_par_iter()
             .fold(ShipCounts::new, |mut ship_counts, _| {
-                // let board = Board::new();
                 let rng = &mut fastrand::Rng::new();
-                // let rng = &mut BadRNG::new();
-                // let mut board = Board::new();
-                // board.place_all_ships_random_recursive(&SHIPS, &mut ship_counts, rng);
-                // board.place_all_ships_recursive(0, 0, SHIPS, &mut ship_counts);
+                let mut board = start_board;
 
-                let mut board = Board::new();
-                for ship in SHIPS {
-                    board.random_place_ship(ship, rng);
+                // let mut board = Board::new();
+                for ship in &start_ships {
+                    board.random_place_ship(*ship, rng);
                 }
-                ship_counts.add_board(board);
+
+                let set_ship_cell_count = board
+                    .cells
+                    .iter()
+                    .filter(|cell| **cell == Cell::Ship)
+                    .count();
+
+                // println!("set_ship_cell_count: {set_ship_cell_count}");
+
+                if set_ship_cell_count == target_ship_cell_count {
+                    ship_counts.add_board(board);
+                }
                 ship_counts
             })
             .collect::<Vec<_>>()
@@ -142,11 +151,96 @@ fn main() {
                 a
             })
             .unwrap();
-        // for _ in 0..1_000_000 {
-        //     ship_counts.add_board(board);
-        // }
+
+        let any_ship_hit = start_board.cells.iter().any(|cell| *cell == Cell::ShipHit);
+        let max_index = zip(ship_counts.counts.iter().enumerate(), &start_board.cells)
+            .filter(|(_, cell)| {
+                // if any_ship_hit {}
+
+                **cell == Cell::Water
+            })
+            .max_by_key(|((_, count), _)| **count)
+            .unwrap()
+            .0
+            .0;
+
         let elapsed_time = start_time.elapsed();
         println!("{ship_count} took: {:?}", elapsed_time);
-        println!("ship_counts: {}", ship_counts)
+        println!("ship_counts: {}", ship_counts);
+
+        let x = max_index % SIZE;
+        let y = max_index / SIZE;
+
+        println!("Max (x, y): ({}, {})", (x as u8 + b'A') as char, y + 1);
+
+        println!("Hit(h), Kill(k), Miss(m):");
+        let mut answer = String::new();
+        std::io::stdin().read_line(&mut answer).unwrap();
+        let mut kill = false;
+        let hit_cell_type = match answer.trim() {
+            "h" => Cell::ShipHit,
+            "m" => Cell::Protected,
+            "k" => {
+                kill = true;
+                Cell::Ship
+            }
+            _ => {
+                println!("Invalid input. Assuming no hit.");
+                Cell::Protected
+            }
+        };
+        if hit_cell_type == Cell::Ship || hit_cell_type == Cell::ShipHit {
+            set_protecet_at_offsets(x, y, &mut start_board, DIAGONAL_OFFSETS);
+        }
+        if kill {
+            let mut hit_pos = vec![(x, y)];
+
+            'outer: loop {
+                set_protecet_at_offsets(x, y, &mut start_board, ORTHOGONAL_OFFSETS);
+                start_board.cells[Board::cell_index(x, y)] = Cell::Ship;
+                for orthogonal_offset in ORTHOGONAL_OFFSETS {
+                    let new_x = (x as i32 + orthogonal_offset.0) as usize;
+                    let new_y = (y as i32 + orthogonal_offset.1) as usize;
+                    if !(0..SIZE).contains(&new_x)
+                        | !(0..SIZE).contains(&new_y)
+                        | hit_pos.contains(&(new_x, new_y))
+                    {
+                        continue;
+                    }
+                    if start_board.cells[Board::cell_index(new_x, new_y)] == Cell::ShipHit {
+                        hit_pos.push((new_x, new_y));
+                        continue 'outer;
+                    }
+                }
+                break;
+            }
+            let ship_len = hit_pos.len();
+            println!("ship to remove: {ship_len}");
+            for i in 0..start_ships.len() {
+                if start_ships[i].length == ship_len {
+                    start_ships.remove(i);
+                    break;
+                }
+            }
+            println!("remaining_ships: {:?}", start_ships);
+        }
+        start_board.cells[max_index] = hit_cell_type;
+        println!("Board: {}", start_board);
+    }
+}
+
+fn set_protecet_at_offsets(x: usize, y: usize, start_board: &mut Board, offsets: [(i32, i32); 4]) {
+    for corner_offset in offsets {
+        let corner_x = x as i32 + corner_offset.0;
+        let corner_y = y as i32 + corner_offset.1;
+        let range = 0..SIZE as i32;
+        if !range.contains(&corner_x) | !range.contains(&corner_y) {
+            continue;
+        }
+        let cell = &mut start_board.cells[Board::cell_index(corner_x as usize, corner_y as usize)];
+        match cell {
+            Cell::Water => *cell = Cell::Protected,
+            Cell::Protected | Cell::Ship | Cell::ShipHit => {}
+        }
     }
 }
