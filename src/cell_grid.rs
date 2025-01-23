@@ -36,10 +36,10 @@ impl<T: Copy> CellGrid<T> {
             })
             .filter(|(x, y)| (0..SIZE).contains(x) & (0..SIZE).contains(y))
     }
-    pub fn foreach_orthogonal_neighbors(&mut self, x: usize, y: usize, f: impl FnMut(&mut T)) {
+    pub fn foreach_orthogonal_neighbor(&mut self, x: usize, y: usize, f: impl FnMut(&mut T)) {
         self.foreach_offset_neighbors::<ORTHOGONAL_OFFSETS>(x, y, f)
     }
-    pub fn foreach_diagonal_neighbors(&mut self, x: usize, y: usize, f: impl FnMut(&mut T)) {
+    pub fn foreach_diagonal_neighbor(&mut self, x: usize, y: usize, f: impl FnMut(&mut T)) {
         self.foreach_offset_neighbors::<DIAGONAL_OFFSETS>(x, y, f)
     }
     pub fn foreach_offset_neighbors<const OFFSETS: [(i32, i32); 4]>(

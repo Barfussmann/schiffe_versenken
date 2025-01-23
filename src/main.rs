@@ -63,39 +63,56 @@ const DIAGONAL_OFFSETS: [(i32, i32); 4] = [(-1, -1), (1, -1), (-1, 1), (1, 1)];
 const ORTHOGONAL_OFFSETS: [(i32, i32); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
 
 fn main() {
-    // rayon::ThreadPoolBuilder::new()
-    //     .num_threads(1)
-    //     .build_global()
-    //     .unwrap();
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build_global()
+        .unwrap();
 
     let mut start_board = Board::new(Cell::Water);
+    let mut ship_hit_overlap = Board::new(Cell::Water);
     let mut start_ships = SHIPS.to_vec();
     let target_ship_cell_count: usize = start_ships.iter().map(|ship| ship.length).sum();
     loop {
         let start_time = Instant::now();
         // let ship_count = 50_000;
         // let ship_count = 1;
-        let ship_count = 10_000_000;
+        let iterations = 1_000_000;
+
+        let any_ship_hits = start_board
+            .cells
+            .as_flattened()
+            .iter()
+            .any(|cell| *cell == Cell::ShipHit);
 
         println!("target_ship_count: {target_ship_cell_count}");
-        let ship_counts = (0..ship_count)
+        let ship_counts = (0..iterations)
             .into_par_iter()
+            // .into_par_iter()
             .fold(ShipCounts::new, |mut ship_counts, _| {
                 let rng = &mut fastrand::Rng::new();
                 let mut board = start_board;
 
-                // let mut board = Board::new();
                 for ship in &start_ships {
-                    // println!("{board}");
                     board.random_place_ship(*ship, rng);
                 }
 
-                let set_ship_cell_count = board
-                    .cells
-                    .as_flattened()
-                    .iter()
-                    .filter(|cell| **cell == Cell::Ship)
-                    .count();
+                let mut should_return = false;
+
+                for (board, ship_hit_overlap) in zip(
+                    board.cells.as_flattened(),
+                    ship_hit_overlap.cells.as_flattened(),
+                ) {
+                    should_return |= matches!((board, ship_hit_overlap), (Cell::Ship, Cell::Ship));
+                }
+
+                if any_ship_hits && !should_return {
+                    return ship_counts;
+                }
+
+                let mut set_ship_cell_count = 0;
+                for cell in board.cells.as_flattened() {
+                    set_ship_cell_count += (*cell == Cell::Ship || *cell == Cell::ShipHit) as usize;
+                }
 
                 if set_ship_cell_count == target_ship_cell_count {
                     ship_counts.add_board(board);
@@ -127,7 +144,7 @@ fn main() {
         .0;
 
         let elapsed_time = start_time.elapsed();
-        println!("{ship_count} took: {:?}", elapsed_time);
+        println!("{iterations} took: {:?}", elapsed_time);
         println!("ship_counts: {}", ship_counts);
 
         let x = max_index % 16;
@@ -138,58 +155,42 @@ fn main() {
         println!("Hit(h), Kill(k), Miss(m):");
         let mut answer = String::new();
         std::io::stdin().read_line(&mut answer).unwrap();
-        let mut kill = false;
         let hit_cell_type = match answer.trim() {
             "h" => Cell::ShipHit,
             "m" => Cell::Protected,
-            "k" => {
-                kill = true;
-                Cell::Ship
-            }
+            "k" => Cell::Ship,
             _ => {
                 println!("Invalid input. Assuming no hit.");
                 Cell::Protected
             }
         };
         if hit_cell_type == Cell::Ship || hit_cell_type == Cell::ShipHit {
-            start_board.foreach_diagonal_neighbors(x, y, |cell| cell.protect());
-            // start_board.set_protecet_at_offsets(x, y, &mut start_board, DIAGONAL_OFFSETS);
+            start_board.foreach_diagonal_neighbor(x, y, |cell| cell.protect());
         }
-        if kill {
-            let mut hit_pos = vec![(x, y)];
+        if hit_cell_type == Cell::Ship {
+            fn search_all_ship_hits(
+                board: &mut Board,
+                (x, y): (usize, usize),
+                hit_pos: &mut Vec<(usize, usize)>,
+            ) {
+                board.foreach_orthogonal_neighbor(x, y, |cell| cell.protect());
+                board[(x, y)] = Cell::Ship;
 
-            'outer: loop {
-                start_board.foreach_orthogonal_neighbors(x, y, |cell| cell.protect());
-                start_board[(x, y)] = Cell::Ship;
-
-                for cords in Board::iter_offset_cords::<ORTHOGONAL_OFFSETS>(x, y) {
-                    if hit_pos.contains(&cords) {
+                for cord in Board::iter_offset_cords::<ORTHOGONAL_OFFSETS>(x, y) {
+                    if hit_pos.contains(&cord) {
                         continue;
                     }
-                    if start_board[cords] == Cell::ShipHit {
-                        hit_pos.push(cords);
-                        continue 'outer;
+                    if board[cord] == Cell::ShipHit {
+                        hit_pos.push(cord);
+                        search_all_ship_hits(board, cord, hit_pos);
                     }
                 }
-
-                // start_board.orthogonal_neighbors(x, y).
-
-                // for orthogonal_offset in ORTHOGONAL_OFFSETS {
-                //     let new_x = (x as i32 + orthogonal_offset.0) as usize;
-                //     let new_y = (y as i32 + orthogonal_offset.1) as usize;
-                //     if !(0..SIZE).contains(&new_x)
-                //         | !(0..SIZE).contains(&new_y)
-                //         | hit_pos.contains(&(new_x, new_y))
-                //     {
-                //         continue;
-                //     }
-                //     if start_board[(new_x, new_y)] == Cell::ShipHit {
-                //         hit_pos.push((new_x, new_y));
-                //         continue 'outer;
-                //     }
-                // }
-                break;
             }
+
+            let mut hit_pos = vec![(x, y)];
+
+            search_all_ship_hits(&mut start_board, (x, y), &mut hit_pos);
+
             let ship_len = hit_pos.len();
             for i in 0..start_ships.len() {
                 if start_ships[i].length == ship_len {
@@ -198,7 +199,22 @@ fn main() {
                 }
             }
         }
+
         start_board[(x, y)] = hit_cell_type;
+
+        ship_hit_overlap = Board::new(Cell::Water);
+        for y in 0..SIZE {
+            for x in 0..SIZE {
+                if start_board[(x, y)] == Cell::ShipHit {
+                    ship_hit_overlap[(x, y)] = Cell::ShipHit;
+                    ship_hit_overlap.foreach_orthogonal_neighbor(x, y, |cell| match cell {
+                        Cell::Water => *cell = Cell::Ship,
+                        Cell::Protected | Cell::ShipHit | Cell::Ship => {}
+                    });
+                }
+            }
+        }
+        println!("ship_hit_overlap: {ship_hit_overlap}");
         println!("Board: {}", start_board);
     }
 }

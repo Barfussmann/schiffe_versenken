@@ -68,7 +68,7 @@ impl Display for Cell {
             Cell::Ship => " X ",
             Cell::Protected => " o ",
             Cell::Water => " _ ",
-            Cell::ShipHit => " X ",
+            Cell::ShipHit => " x ",
         };
         f.write_str(str)
     }
