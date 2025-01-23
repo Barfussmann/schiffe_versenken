@@ -1,9 +1,10 @@
 use crate::Ship;
-use crate::ShipCounts;
-use crate::{BOARD_SIZE, SHIPS, SIZE};
+use crate::cell_grid::CellGrid;
+use crate::ship_counts::ShipCounts;
+use crate::{SHIPS, SIZE};
 
 static PLACED_SHIPS: [[[[Board; SIZE]; SIZE]; 2]; 10] = {
-    let mut placed_ships = [[[[Board::new(); SIZE]; SIZE]; 2]; 10];
+    let mut placed_ships = [[[[Board::new(Cell::Water); SIZE]; SIZE]; 2]; 10];
 
     let mut ship_i = 0;
     while ship_i < SHIPS.len() {
@@ -52,6 +53,14 @@ pub enum Cell {
     ShipHit = 2,
     Ship = 3,
 }
+impl Cell {
+    pub fn protect(&mut self) {
+        match self {
+            Cell::Water => *self = Cell::Protected,
+            Cell::Protected | Cell::ShipHit | Cell::Ship => {}
+        }
+    }
+}
 
 impl Display for Cell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -71,18 +80,9 @@ pub enum WasShipplacmentSuccsessfull {
     No,
 }
 
-#[derive(Debug, Clone, Copy)]
-#[repr(align(128))]
-pub struct Board {
-    pub cells: [Cell; BOARD_SIZE],
-}
+pub type Board = CellGrid<Cell>;
 
 impl Board {
-    pub const fn new() -> Board {
-        Board {
-            cells: [Cell::Water; BOARD_SIZE],
-        }
-    }
     const fn saturating_cell_index(mut x: usize, mut y: usize) -> usize {
         if x >= SIZE {
             x = SIZE - 1;
@@ -130,8 +130,12 @@ impl Board {
         while i_y < high_y {
             let mut i_x = low_x;
             while i_x < high_x {
-                let index = Self::saturating_cell_index(i_x, i_y);
-                self.cells[index] = Cell::Protected;
+                if self.is_inside(i_x, i_y) {
+                    self.cells[i_y][i_x] = Cell::Protected;
+                }
+                // self.cells[i_y][i_x] = Cell::Protected;
+                // let index = Self::saturating_cell_index(i_x, i_y);
+                // self.cells[index] = Cell::Protected;
 
                 i_x += 1;
             }
@@ -140,8 +144,12 @@ impl Board {
 
         let mut i = 0;
         while i < ship.length {
-            let index = Self::saturating_cell_index(x, y);
-            self.cells[index] = Cell::Ship;
+            if self.is_inside(x, y) {
+                self.cells[y][x] = Cell::Ship;
+            }
+            // self.cells[y][x] = Cell::Ship;
+            // let index = Self::saturating_cell_index(x, y);
+            // self.cells[index] = Cell::Ship;
 
             match direction {
                 Direction::Horizontal => x += 1,
@@ -178,7 +186,10 @@ impl Board {
         };
 
         let mut is_placement_allowed = true;
-        for (cell, placed_ship_cell) in zip(&mut self.cells, &placed_ship_board.cells) {
+        for (cell, placed_ship_cell) in zip(
+            self.cells.as_flattened_mut(),
+            placed_ship_board.cells.as_flattened(),
+        ) {
             let cell_protects = *cell == Cell::Protected || *cell == Cell::Ship;
             if cell_protects && *placed_ship_cell == Cell::Ship {
                 is_placement_allowed = false;
@@ -189,58 +200,13 @@ impl Board {
             return WasShipplacmentSuccsessfull::No;
         }
 
-        for (cell, placed_ship_cell) in zip(&mut self.cells, &placed_ship_board.cells) {
+        for (cell, placed_ship_cell) in zip(
+            self.cells.as_flattened_mut(),
+            placed_ship_board.cells.as_flattened(),
+        ) {
             *cell = (*cell).max(*placed_ship_cell);
         }
         WasShipplacmentSuccsessfull::Yes
-    }
-    pub fn is_ship_allowed(
-        &self,
-        mut x: usize,
-        mut y: usize,
-        direction: Direction,
-        ship: Ship,
-    ) -> bool {
-        for _ in 0..ship.length {
-            let index = Self::cell_index(x, y);
-
-            if self.cells[index] == Cell::Ship || self.cells[index] == Cell::Protected {
-                return false;
-            }
-
-            match direction {
-                Direction::Horizontal => x += 1,
-                Direction::Vetrical => y += 1,
-            }
-        }
-        true
-    }
-    pub fn set_protected_rectangle(
-        &mut self,
-        ship_left_x: usize,
-        ship_top_y: usize,
-        mut width: usize,
-        mut height: usize,
-    ) {
-        if ship_left_x == 0 {
-            width -= 1;
-        }
-        if ship_top_y == 0 {
-            height -= 1;
-        }
-
-        let low_x = ship_left_x.saturating_sub(1);
-        let low_y = ship_top_y.saturating_sub(1);
-
-        let high_x = (low_x + width).min(SIZE);
-        let high_y = (low_y + height).min(SIZE);
-
-        for y in low_y..high_y {
-            for x in low_x..high_x {
-                let index = Self::cell_index(x, y);
-                self.cells[index] = Cell::Protected;
-            }
-        }
     }
     pub const fn cell_index(x: usize, y: usize) -> usize {
         x + y * SIZE
@@ -354,8 +320,10 @@ impl Board {
 impl Display for Board {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_char('\n')?;
-        for row in self.cells.chunks(SIZE).take(SIZE) {
-            for cell in row {
+        // for row in self.cells.iter() {
+        //     for cell in row.iter() {
+        for row in self.cells.iter().take(SIZE) {
+            for cell in row.iter().take(SIZE) {
                 f.write_fmt(format_args!("{}", cell))?;
             }
             f.write_char('\n')?;
