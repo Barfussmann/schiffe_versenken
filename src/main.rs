@@ -15,18 +15,25 @@ use ship_counts::ShipCounts;
 const SIZE: usize = 10;
 const BOARD_SIZE: usize = SIZE.next_power_of_two().pow(2);
 
-const SHIPS: [Ship; 10] = [
-    Ship::new(4, 0),
-    Ship::new(3, 1),
+const SHIPS: [Ship; 5] = [
+    Ship::new(5, 0),
+    Ship::new(4, 1),
     Ship::new(3, 2),
-    Ship::new(2, 3),
+    Ship::new(3, 3),
     Ship::new(2, 4),
-    Ship::new(2, 5),
-    Ship::new(1, 6),
-    Ship::new(1, 7),
-    Ship::new(1, 8),
-    Ship::new(1, 9),
 ];
+// const SHIPS: [Ship; 10] = [
+//     Ship::new(4, 0),
+//     Ship::new(3, 1),
+//     Ship::new(3, 2),
+//     Ship::new(2, 3),
+//     Ship::new(2, 4),
+//     Ship::new(2, 5),
+//     Ship::new(1, 6),
+//     Ship::new(1, 7),
+//     Ship::new(1, 8),
+//     Ship::new(1, 9),
+// ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Ship {
@@ -63,10 +70,10 @@ const DIAGONAL_OFFSETS: [(i32, i32); 4] = [(-1, -1), (1, -1), (-1, 1), (1, 1)];
 const ORTHOGONAL_OFFSETS: [(i32, i32); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
 
 fn main() {
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(1)
-        .build_global()
-        .unwrap();
+    // rayon::ThreadPoolBuilder::new()
+    //     .num_threads(1)
+    //     .build_global()
+    //     .unwrap();
 
     let mut start_board = Board::new(Cell::Water);
     let mut ship_hit_overlap = Board::new(Cell::Water);
@@ -76,7 +83,7 @@ fn main() {
         let start_time = Instant::now();
         // let ship_count = 50_000;
         // let ship_count = 1;
-        let iterations = 1_000_000;
+        let iterations = 20_000_000;
 
         let any_ship_hits = start_board
             .cells
