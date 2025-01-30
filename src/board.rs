@@ -96,17 +96,15 @@ pub enum WasShipplacmentSuccsessfull {
 }
 
 #[derive(Clone, Copy)]
-#[repr(align(64))]
+#[repr(align(32))]
 pub struct BitBoard {
     pub protected: u128,
-    pub ship_hit: u128,
     pub ship: u128,
 }
 impl BitBoard {
     pub const fn new(board: Board) -> Self {
         let mut me = Self {
             protected: 0,
-            ship_hit: 0,
             ship: 0,
         };
         let mut i = 0;
@@ -115,69 +113,81 @@ impl BitBoard {
             match board.cells[i] {
                 Cell::Water => {}
                 Cell::Protected => me.protected |= 1 << i,
-                Cell::ShipHit => me.ship_hit |= 1 << i,
-                Cell::Ship => me.ship |= 1 << i,
+                Cell::Ship | Cell::ShipHit => {
+                    me.ship |= 1 << i;
+                    me.protected |= 1 << i
+                }
             }
 
             i += 1;
         }
         me
     }
-    fn place_ship(
-        &mut self,
-        index: usize,
-        // x: usize,
-        // y: usize,
-        // direction: Direction,
-        ship: Ship,
-    ) {
-        // match direction {
-        //     Direction::Horizontal => {
-        //         debug_assert!(x <= SIZE - ship.length);
-        //         debug_assert!(y < SIZE);
-        //     }
-        //     Direction::Vetrical => {
-        //         debug_assert!(x < SIZE);
-        //         debug_assert!(y <= SIZE - ship.length);
-        //     }
-        // }
+    // #[inline(never)]
+    fn place_ship(&mut self, index: usize, ship: Ship) {
         let placed_ship_board = unsafe {
             PLACED_BITS_SHIPS
                 .get_unchecked(ship.index)
                 .as_flattened()
                 .as_flattened()
                 .get_unchecked(index)
-            // .get_unchecked(direction as usize)
-            // .get_unchecked(y)
-            // .get_unchecked(x)
         };
 
         self.protected |= placed_ship_board.protected;
         self.ship |= placed_ship_board.ship;
     }
+    // #[inline(never)]
     fn allowable_ship_placements(&self, ship: Ship) -> (u128, u128) {
-        let allowable = !(self.protected | self.ship);
+        const Y_SHIP_MASK: [u128; 8] = {
+            let mut masks = [0; 8];
+
+            let mut ship_length = 1;
+            while ship_length < masks.len() {
+                masks[ship_length] = ((1 << (SIZE * SIZE)) - 1) >> (SIZE * (ship_length - 1));
+                ship_length += 1;
+            }
+
+            masks
+        };
+        const X_SHIP_MASK: [u128; 8] = {
+            let mut masks = [0; 8];
+
+            let mut ship_length = 1;
+            while ship_length < masks.len() {
+                let mut mask = 0;
+
+                let single_row_allowable = (1 << (SIZE - (ship_length - 1))) - 1;
+
+                let mut y = 0;
+                while y < SIZE {
+                    mask |= single_row_allowable << (y * SIZE);
+                    y += 1
+                }
+
+                masks[ship_length] = mask;
+                ship_length += 1;
+            }
+
+            masks
+        };
+
+        let allowable = !self.protected;
 
         let mut ship_placements_x = allowable;
-        for i in 1..ship.length {
+        for i in 1..ship.length() {
             ship_placements_x &= allowable >> i;
         }
-        let single_row_allowable = (1 << (SIZE - (ship.length - 1))) - 1;
-        // let single_row_allowable = ((1 << SIZE - (ship.length - 1)) - 1) >> (ship.length - 1);
-        let mut all = 0;
-        for y in 0..SIZE {
-            all |= single_row_allowable << (y * SIZE);
-        }
-        ship_placements_x &= all;
+        ship_placements_x &= X_SHIP_MASK[ship.length()];
 
         let mut ship_placements_y = allowable;
-        for i in 1..ship.length {
+        for i in 1..ship.length() {
             ship_placements_y &= allowable >> (i * SIZE);
         }
-        ship_placements_y &= ((1 << (SIZE * SIZE)) - 1) >> (SIZE * (ship.length - 1));
+        ship_placements_y &= Y_SHIP_MASK[ship.length()];
 
         (ship_placements_x, ship_placements_y)
     }
+    // #[inline(never)]
     pub fn random_place_ship(&mut self, ship: Ship, rng: &mut fastrand::Rng) {
         let (ship_placements_x, ship_placements_y) = self.allowable_ship_placements(ship);
         let x_ships = ship_placements_x.count_ones();
@@ -186,26 +196,58 @@ impl BitBoard {
         let total_index = rng.u8(..(x_ships + y_ships) as u8) as usize;
 
         let index = if total_index < x_ships as usize {
-            nth_set_bit_index(ship_placements_x, total_index)
+            nth_set_bit_index(ship_placements_x, total_index as u32) as usize
         } else {
-            (SIZE * SIZE) + nth_set_bit_index(ship_placements_y, total_index - x_ships as usize)
+            (SIZE * SIZE)
+                + nth_set_bit_index(ship_placements_y, (total_index - x_ships as usize) as u32)
+                    as usize
         };
 
         self.place_ship(index, ship)
     }
 }
 
-fn nth_set_bit_index(num: u128, n: usize) -> usize {
-    let mut count = 0;
-    for i in 0..128 {
-        if num & (1 << i) != 0 {
-            if count == n {
-                return i;
-            }
-            count += 1;
-        }
-    }
-    0
+fn nth_set_bit_index_u64(num: u64, n: u32) -> u32 {
+    let spread_bits = unsafe { std::arch::x86_64::_pdep_u64(1 << n, num) };
+    spread_bits.trailing_zeros()
+}
+// #[inline(never)]
+fn nth_set_bit_index(num: u128, n: u32) -> u32 {
+    // let low = num as u64;
+    // let high = (num >> 64) as u64;
+    // let low_set_bits = low.count_ones();
+
+    // if n < low_set_bits {
+    //     nth_set_bit_index_u64(low, n)
+    // } else {
+    //     64 + nth_set_bit_index_u64(high, n - low_set_bits)
+    // }
+
+    let low = num as u64;
+    let high = (num >> 64) as u64;
+    let low_set_bits = low.count_ones();
+
+    let (target_n, num, offset) = if n < low_set_bits {
+        (n, low, 0)
+    } else {
+        (n - low_set_bits, high, 64)
+    };
+    nth_set_bit_index_u64(num, target_n) + offset
+
+    // let right_result = 'outer: {
+    //     let mut count = 0;
+    //     for i in 0..128 {
+    //         if num & (1 << i) != 0 {
+    //             if count == n {
+    //                 break 'outer i;
+    //             }
+    //             count += 1;
+    //         }
+    //     }
+    //     0
+    // };
+    // println!("wrong: {:2}, right: {:2}", result, right_result);
+    // right_result
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -242,12 +284,12 @@ impl Board {
         let mut height;
         match direction {
             Direction::Horizontal => {
-                width = ship.length + 2;
+                width = ship.length() + 2;
                 height = 3;
             }
             Direction::Vetrical => {
                 width = 3;
-                height = ship.length + 2;
+                height = ship.length() + 2;
             }
         };
         if x == 0 {
@@ -276,7 +318,7 @@ impl Board {
         }
 
         let mut i = 0;
-        while i < ship.length {
+        while i < ship.length() {
             let index = Self::saturating_cell_index(x, y);
             self.cells[index] = Cell::Ship;
 

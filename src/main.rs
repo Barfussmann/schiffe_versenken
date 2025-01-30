@@ -78,14 +78,34 @@ impl Display for ShipCounts {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShipLength {
+    _1 = 1,
+    _2 = 2,
+    _3 = 3,
+    _4 = 4,
+    _5 = 5,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Ship {
-    length: usize,
+    length: ShipLength,
     index: usize,
 }
 
 impl Ship {
     const fn new(length: usize, index: usize) -> Ship {
+        let length = match length {
+            1 => ShipLength::_1,
+            2 => ShipLength::_2,
+            3 => ShipLength::_3,
+            4 => ShipLength::_4,
+            5 => ShipLength::_5,
+            _ => unreachable!(),
+        };
         Ship { length, index }
+    }
+    const fn length(&self) -> usize {
+        self.length as usize
     }
 }
 pub struct BadRNG(u64);
@@ -120,11 +140,12 @@ fn main() {
 
     let mut start_board = Board::new();
     let mut start_ships = SHIPS.to_vec();
-    let target_ship_cell_count: usize = start_ships.iter().map(|ship| ship.length).sum();
+    let target_ship_cell_count: usize = start_ships.iter().map(|ship| ship.length()).sum();
     loop {
         let start_time = Instant::now();
         // let ship_count = 50_000;
-        let ship_count = 25_000_000u64;
+        let ship_count = 10_000_000u64;
+        // let ship_count = 25_000_000u64;
         // let ship_count = 25_000_000u64;
 
         let bit_board = BitBoard::new(start_board);
@@ -150,24 +171,6 @@ fn main() {
 
                         ship_counts.add_bit_board(board);
                     }
-                    // let mut board = start_board;
-
-                    // for ship in &start_ships {
-                    //     board.random_place_ship(*ship, &mut rng);
-                    // }
-
-                    // ship_counts.add_board(board);
-
-                    // let set_ship_cell_count = board
-                    //     .cells
-                    //     .iter()
-                    //     .filter(|cell| **cell == Cell::Ship)
-                    //     .count();
-                    // if set_ship_cell_count == target_ship_cell_count {
-                    //     ship_counts.add_board(board);
-                    // } else {
-                    //     panic!()
-                    // }
                     (ship_counts, rng)
                 },
             )
@@ -180,13 +183,8 @@ fn main() {
             })
             .unwrap();
 
-        // let any_ship_hit = start_board.cells.iter().any(|cell| *cell == Cell::ShipHit);
         let max_index = zip(ship_counts.counts.iter().enumerate(), &start_board.cells)
-            .filter(|(_, cell)| {
-                // if any_ship_hit {}
-
-                **cell == Cell::Water
-            })
+            .filter(|(_, cell)| **cell == Cell::Water)
             .max_by_key(|((_, count), _)| **count)
             .unwrap()
             .0
@@ -245,7 +243,7 @@ fn main() {
             let ship_len = hit_pos.len();
             println!("ship to remove: {ship_len}");
             for i in 0..start_ships.len() {
-                if start_ships[i].length == ship_len {
+                if start_ships[i].length() == ship_len {
                     start_ships.remove(i);
                     break;
                 }
