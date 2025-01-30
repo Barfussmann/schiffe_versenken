@@ -15,25 +15,25 @@ use ship_counts::ShipCounts;
 const SIZE: usize = 10;
 const BOARD_SIZE: usize = SIZE.next_power_of_two().pow(2);
 
-const SHIPS: [Ship; 5] = [
-    Ship::new(5, 0),
-    Ship::new(4, 1),
-    Ship::new(3, 2),
-    Ship::new(3, 3),
-    Ship::new(2, 4),
-];
-// const SHIPS: [Ship; 10] = [
-//     Ship::new(4, 0),
-//     Ship::new(3, 1),
+// const SHIPS: [Ship; 5] = [
+//     Ship::new(5, 0),
+//     Ship::new(4, 1),
 //     Ship::new(3, 2),
-//     Ship::new(2, 3),
+//     Ship::new(3, 3),
 //     Ship::new(2, 4),
-//     Ship::new(2, 5),
-//     Ship::new(1, 6),
-//     Ship::new(1, 7),
-//     Ship::new(1, 8),
-//     Ship::new(1, 9),
 // ];
+const SHIPS: [Ship; 10] = [
+    Ship::new(4, 0),
+    Ship::new(3, 1),
+    Ship::new(3, 2),
+    Ship::new(2, 3),
+    Ship::new(2, 4),
+    Ship::new(2, 5),
+    Ship::new(1, 6),
+    Ship::new(1, 7),
+    Ship::new(1, 8),
+    Ship::new(1, 9),
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Ship {
