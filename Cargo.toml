@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 fastrand = "2.3.0"
+num-format = "0.4.4"
 rand = "0.8.5"
 rayon = "1.10.0"
 
