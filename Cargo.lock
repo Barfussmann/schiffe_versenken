@@ -9,10 +9,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
+name = "battle_ship"
+version = "0.1.0"
+dependencies = [
+ "fastrand",
+ "num-format",
+ "rand",
+ "rayon",
+]
+
+[[package]]
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
+
+[[package]]
+name = "calc_core"
+version = "0.1.0"
 
 [[package]]
 name = "cfg-if"
@@ -168,16 +182,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "schiffe_versenken"
-version = "0.1.0"
-dependencies = [
- "fastrand",
- "num-format",
- "rand",
- "rayon",
-]
-
-[[package]]
 name = "syn"
 version = "2.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -190,9 +194,9 @@ dependencies = [
 
 [[package]]
 name = "unicode-ident"
-version = "1.0.14"
+version = "1.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adb9e6ca4f869e1180728b7950e35922a7fc6397f7b641499e8f3ef06e50dc83"
+checksum = "a210d160f08b701c8721ba1c726c11662f877ea6b7094007e1ca9a1041945034"
 
 [[package]]
 name = "wasi"
