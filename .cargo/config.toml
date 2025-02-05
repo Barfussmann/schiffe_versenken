@@ -1,2 +1,9 @@
 [build]
 rustflags = ["-C", "target-cpu=native"]
+
+
+# This is a hack to get cross compilation from znver2 to znver4 with buildscripts working to test avx512
+[target.x86_64-unknown-linux-musl]
+rustflags = ["-C", "target-cpu=znver4"]
+# rustflags = ["-C", "target-cpu=znver5"]
+# rustflags = ["-C", "target-cpu=znver4"]

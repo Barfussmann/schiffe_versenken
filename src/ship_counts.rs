@@ -35,11 +35,11 @@ impl ShipCounts {
     #[inline(never)]
     pub fn add_bit_board(&mut self, board: BitBoard) {
         for i in 0..40 {
-            self.counts[i] += ((board.ship[0] & (1 << i)) != 0) as u64;
+            self.counts[i] += ((board.ship()[0] & (1 << i)) != 0) as u64;
         }
         // high bits
         for i in 0..60 {
-            self.counts[i + 40] += ((board.ship[1] & (1 << i)) != 0) as u64;
+            self.counts[i + 40] += ((board.ship()[1] & (1 << i)) != 0) as u64;
         }
 
         self.board_count += 1;
