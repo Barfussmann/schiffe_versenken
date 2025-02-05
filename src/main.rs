@@ -1,4 +1,4 @@
-#![feature(portable_simd)]
+#![feature(portable_simd, adt_const_params)]
 #![allow(dead_code)]
 
 use std::{iter::zip, time::Instant};
@@ -8,25 +8,38 @@ use bit_board::BitBoard;
 use board::Board;
 use board::Cell;
 use num_format::{Locale, ToFormattedString};
-use rand::{Rng, thread_rng};
+use rand::Rng;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use rayon::slice::ParallelSlice;
+use ship::Ship;
 
 const SIZE: usize = 10;
 const BOARD_SIZE: usize = (SIZE * SIZE).next_multiple_of(64);
 
-const SHIPS: &[ship::Ship] = &[
-    ship::Ship::new(4, 0),
-    ship::Ship::new(3, 1),
-    ship::Ship::new(3, 2),
-    ship::Ship::new(2, 3),
-    ship::Ship::new(2, 4),
-    ship::Ship::new(2, 5),
-    ship::Ship::new(1, 6),
-    ship::Ship::new(1, 7),
-    ship::Ship::new(1, 8),
-    ship::Ship::new(1, 9),
+const SHIPS: &[Ship] = &[
+    Ship::new(4, 0),
+    Ship::new(3, 1),
+    Ship::new(3, 2),
+    Ship::new(2, 3),
+    Ship::new(2, 4),
+    Ship::new(2, 5),
+    Ship::new(1, 6),
+    Ship::new(1, 7),
+    Ship::new(1, 8),
+    Ship::new(1, 9),
 ];
+// const SHIPS: &[Ship] = &[
+//     Ship::new(4, 0),
+//     Ship::new(3, 1),
+//     Ship::new(3, 2),
+//     Ship::new(2, 3),
+//     Ship::new(2, 4),
+//     Ship::new(2, 5),
+//     Ship::new(1, 6),
+//     Ship::new(1, 7),
+//     Ship::new(1, 8),
+//     Ship::new(1, 9),
+// ];
 
 mod bit_board;
 mod ship;
@@ -39,7 +52,7 @@ fn main() {
     //     .build_global()
     //     .unwrap();
 
-    let iterations = 400_000_000u64;
+    let iterations = 200_000_000u64;
     // let iterations = 140_000_000u64;
 
     let mut start_board = Board::new();
@@ -52,32 +65,44 @@ fn main() {
 
         let bit_board = BitBoard::new(start_board);
 
-        let mut board = bit_board;
-        for ship in &start_ships {
-            board.random_place_ship(*ship, thread_rng().gen_range(0..u32::MAX));
-        }
         let start_time = Instant::now();
 
         let ship_counts = random_values[..]
-            .par_chunks(start_ships.len())
+            .par_chunks_exact(start_ships.len())
             // let ship_counts = (0..iterations)
             //     .into_par_iter()
             .fold(
                 ship_counts::ShipCounts::new,
                 |mut ship_counts, rand_values| {
-                    step(&start_ships, bit_board, &mut ship_counts, rand_values);
+                    step(
+                        &start_ships,
+                        bit_board,
+                        &mut ship_counts,
+                        rand_values.try_into().unwrap(),
+                    );
                     #[inline(never)]
                     fn step(
-                        start_ships: &[ship::Ship],
+                        _start_ships: &[Ship],
                         bit_board: BitBoard,
                         ship_counts: &mut ship_counts::ShipCounts,
-                        rand_values: &[u32],
+                        random_values: &[u32; 10],
                     ) {
                         let mut board = bit_board;
 
-                        for (ship, random_value) in zip(start_ships, rand_values) {
-                            board.random_place_ship(*ship, *random_value);
-                        }
+                        board.random_place_ship::<{ Ship::new(4, 0) }>(random_values[0]);
+                        board.random_place_ship::<{ Ship::new(3, 1) }>(random_values[1]);
+                        board.random_place_ship::<{ Ship::new(3, 2) }>(random_values[2]);
+                        board.random_place_ship::<{ Ship::new(2, 3) }>(random_values[3]);
+                        board.random_place_ship::<{ Ship::new(2, 4) }>(random_values[4]);
+                        board.random_place_ship::<{ Ship::new(2, 5) }>(random_values[5]);
+                        board.random_place_ship::<{ Ship::new(1, 6) }>(random_values[6]);
+                        board.random_place_ship::<{ Ship::new(1, 7) }>(random_values[7]);
+                        board.random_place_ship::<{ Ship::new(1, 8) }>(random_values[8]);
+                        board.random_place_ship::<{ Ship::new(1, 9) }>(random_values[9]);
+
+                        // for (ship, random_value) in zip(start_ships, rand_values) {
+                        //     board.random_place_ship(*ship, *random_value);
+                        // }
 
                         ship_counts.add_bit_board(board);
                     }

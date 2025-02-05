@@ -4,8 +4,8 @@ use crate::{BOARD_SIZE, SHIPS, SIZE};
 use std::fmt::Display;
 use std::fmt::Write;
 
-pub static PLACED_SHIPS: [[[[Board; SIZE]; SIZE]; 2]; 10] = {
-    let mut placed_ships = [[[[Board::new(); SIZE]; SIZE]; 2]; 10];
+pub static PLACED_SHIPS: [[Board; 256]; 10] = {
+    let mut placed_ships = [[Board::new(); 256]; 10];
 
     let mut ship_i = 0;
     while ship_i < SHIPS.len() {
@@ -23,7 +23,8 @@ pub static PLACED_SHIPS: [[[[Board; SIZE]; SIZE]; 2]; 10] = {
                         _ => unreachable!(),
                     };
 
-                    placed_ships[ship_index][dir_i][y][x].const_place_ship(x, y, dir, ship);
+                    let index = dir_i * 128 + y * 10 + x;
+                    placed_ships[ship_index][index].const_place_ship(x, y, dir, ship);
 
                     x += 1;
                 }
