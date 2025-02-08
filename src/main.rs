@@ -1,5 +1,6 @@
 #![feature(portable_simd, adt_const_params, stdarch_x86_avx512)]
 #![allow(dead_code)]
+// #![warn(clippy::pedantic)]
 
 use std::{iter::zip, time::Instant};
 mod board;
@@ -52,7 +53,7 @@ fn main() {
     //     .build_global()
     //     .unwrap();
 
-    let iterations = 20_000_000u64;
+    let iterations = 24_000_000u64;
     // let iterations = 140_000_000u64;
 
     let mut start_board = Board::new();
@@ -90,15 +91,15 @@ fn main() {
                         let mut board = bit_board;
 
                         board.random_place_ship::<{ Ship::new(4, 0) }>(random_values[0]);
-                        // board.random_place_ship::<{ Ship::new(3, 1) }>(random_values[1]);
-                        // board.random_place_ship::<{ Ship::new(3, 2) }>(random_values[2]);
-                        // board.random_place_ship::<{ Ship::new(2, 3) }>(random_values[3]);
-                        // board.random_place_ship::<{ Ship::new(2, 4) }>(random_values[4]);
-                        // board.random_place_ship::<{ Ship::new(2, 5) }>(random_values[5]);
-                        // board.random_place_ship::<{ Ship::new(1, 6) }>(random_values[6]);
-                        // board.random_place_ship::<{ Ship::new(1, 7) }>(random_values[7]);
-                        // board.random_place_ship::<{ Ship::new(1, 8) }>(random_values[8]);
-                        // board.random_place_ship::<{ Ship::new(1, 9) }>(random_values[9]);
+                        board.random_place_ship::<{ Ship::new(3, 1) }>(random_values[1]);
+                        board.random_place_ship::<{ Ship::new(3, 2) }>(random_values[2]);
+                        board.random_place_ship::<{ Ship::new(2, 3) }>(random_values[3]);
+                        board.random_place_ship::<{ Ship::new(2, 4) }>(random_values[4]);
+                        board.random_place_ship::<{ Ship::new(2, 5) }>(random_values[5]);
+                        board.random_place_ship::<{ Ship::new(1, 6) }>(random_values[6]);
+                        board.random_place_ship::<{ Ship::new(1, 7) }>(random_values[7]);
+                        board.random_place_ship::<{ Ship::new(1, 8) }>(random_values[8]);
+                        board.random_place_ship::<{ Ship::new(1, 9) }>(random_values[9]);
 
                         // for (ship, random_value) in zip(start_ships, rand_values) {
                         //     board.random_place_ship(*ship, *random_value);

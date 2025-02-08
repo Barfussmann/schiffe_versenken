@@ -55,10 +55,9 @@ pub enum Cell {
 impl Display for Cell {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let str = match self {
-            Cell::Ship => " X ",
             Cell::Protected => " o ",
             Cell::Water => " _ ",
-            Cell::ShipHit => " X ",
+            Cell::ShipHit | Cell::Ship => " X ",
         };
         f.write_str(str)
     }
