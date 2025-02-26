@@ -3,40 +3,54 @@ use crate::{BOARD_SIZE, SHIPS, SIZE};
 
 use std::fmt::Display;
 use std::fmt::Write;
+use std::sync::LazyLock;
 
-pub static PLACED_SHIPS: [[Board; 256]; 10] = {
-    let mut placed_ships = [[Board::new(); 256]; 10];
-
-    let mut ship_i = 0;
-    while ship_i < SHIPS.len() {
-        let ship = SHIPS[ship_i];
-        let ship_index = ship.index;
-        let mut dir_i = 0;
-        while dir_i < 2 {
-            let mut y = 0;
-            while y < SIZE {
-                let mut x = 0;
-                while x < SIZE {
-                    let dir = match dir_i {
-                        0 => Direction::Horizontal,
-                        1 => Direction::Vetrical,
-                        _ => unreachable!(),
-                    };
-
-                    let index = dir_i * 128 + y * 10 + x;
-                    placed_ships[ship_index][index].const_place_ship(x, y, dir, ship);
-
-                    x += 1;
+pub static PLACED_SHIPS: LazyLock<Box<[[Board; 256]; 4]>> = LazyLock::new(|| {
+    let mut placed_ships = [[Board::new(); 256]; 4];
+    for ship in SHIPS {
+        for dir in [Direction::Horizontal, Direction::Vetrical] {
+            for y in 0..SIZE {
+                for x in 0..SIZE {
+                    let index = dir as usize * 128 + y * 10 + x;
+                    placed_ships[ship.index][index].const_place_ship(x, y, dir, *ship);
                 }
-                y += 1;
             }
-            dir_i += 1;
         }
-        ship_i += 1;
     }
+    Box::new(placed_ships)
+});
+// pub static PLACED_SHIPS: [[Board; 256]; 10] = {
+//     let mut placed_ships = [[Board::new(); 256]; 10];
 
-    placed_ships
-};
+//     let mut ship_i = 0;
+//     while ship_i < SHIPS.len() {
+//         let ship = SHIPS[ship_i];
+//         let ship_index = ship.index;
+//         let mut dir_i = 0;
+//         while dir_i < 2 {
+//             let mut y = 0;
+//             while y < SIZE {
+//                 let mut x = 0;
+//                 while x < SIZE {
+//                     let dir = match dir_i {
+//                         0 => Direction::Horizontal,
+//                         1 => Direction::Vetrical,
+//                         _ => unreachable!(),
+//                     };
+
+//                     let index = dir_i * 128 + y * 10 + x;
+//                     placed_ships[ship_index][index].const_place_ship(x, y, dir, ship);
+
+//                     x += 1;
+//                 }
+//                 y += 1;
+//             }
+//             dir_i += 1;
+//         }
+//         ship_i += 1;
+//     }
+//     placed_ships
+// };
 
 #[derive(Debug, Clone, Copy)]
 pub enum Direction {

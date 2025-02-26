@@ -1,5 +1,15 @@
 [build]
-rustflags = ["-C", "target-cpu=native"]
+# rustflags = ["-C", "target-cpu=native"]
+rustflags = ["-C", "target-cpu=native", "-Z", "location-detail=none"]
+[unstable]
+# build-std = ["std"]
+# build-std = ["std", "panic_abort"]
+# build-std-features = ["panic_immediate_abort"]
+# build-std-features = ["optimize_for_size"]
+# build-std-features = ["optimize_for_size", "panic_immediate_abort"]
+
+# [target.x86_64-unknown-linux-gnu]
+# rustflags = ["-C", "target-cpu=native"]
 
 
 # This is a hack to get cross compilation from znver2 to znver4 with buildscripts working to test avx512

@@ -1,3 +1,4 @@
+use std::sync::LazyLock;
 #[allow(unused)]
 use std::{
     arch::x86_64::_mm256_popcnt_epi64,
@@ -13,15 +14,11 @@ use crate::{
     ship::Ship,
 };
 
-pub static PLACED_BITS_SHIPS: [[BitBoard; 256]; 10] = {
-    let mut placed_ships = [[BitBoard::new(Board::new()); 256]; 10];
-
-    let mut ship_i = 0;
-    while ship_i < 10 {
-        let mut dir = 0;
-        while dir < 2 {
-            let mut i = 0;
-            while i < 256 {
+pub static PLACED_BITS_SHIPS: LazyLock<Box<[[BitBoard; 256]; 4]>> = LazyLock::new(|| {
+    let mut placed_ships = [[BitBoard::new(Board::new()); 256]; 4];
+    for ship_i in 0..PLACED_SHIPS.len() {
+        for dir in 0..2 {
+            for i in 0..128 {
                 let bit_board_offset = BitBoard::map_index_to_bit_index(i);
                 let bit_board_index = dir * 128 + bit_board_offset;
 
@@ -30,15 +27,35 @@ pub static PLACED_BITS_SHIPS: [[BitBoard; 256]; 10] = {
                     placed_ships[ship_i][bit_board_index] =
                         BitBoard::new(PLACED_SHIPS[ship_i][index]);
                 }
-                i += 1;
             }
-            dir += 1;
         }
-        ship_i += 1;
     }
+    Box::new(placed_ships)
+});
+// pub static PLACED_BITS_SHIPS: [[BitBoard; 256]; 10] = {
+//     let mut placed_ships = [[BitBoard::new(Board::new()); 256]; 10];
+//     let mut ship_i = 0;
+//     while ship_i < PLACED_SHIPS.len() {
+//         let mut dir = 0;
+//         while dir < 2 {
+//             let mut i = 0;
+//             while i < 256 {
+//                 let bit_board_offset = BitBoard::map_index_to_bit_index(i);
+//                 let bit_board_index = dir * 128 + bit_board_offset;
 
-    placed_ships
-};
+//                 let index = dir * 128 + i;
+//                 if bit_board_index < 256 {
+//                     placed_ships[ship_i][bit_board_index] =
+//                         BitBoard::new(PLACED_SHIPS[ship_i][index]);
+//                 }
+//                 i += 1;
+//             }
+//             dir += 1;
+//         }
+//         ship_i += 1;
+//     }
+//     placed_ships
+// };
 
 #[derive(Clone, Copy)]
 #[repr(align(32))]
@@ -95,7 +112,7 @@ impl BitBoard {
             ]),
         }
     }
-    const fn map_index_to_bit_index(index: usize) -> usize {
+    pub const fn map_index_to_bit_index(index: usize) -> usize {
         if index < 40 {
             index
         } else {
@@ -114,14 +131,14 @@ impl BitBoard {
     }
     // #[inline(never)]
     fn allowable_ship_placements<const S: Ship>(&self) -> u64x4 {
-        // let allowable = !self.protected();
-        // if S.length() == 1 {
-        //     return simd_swizzle!(
-        //         allowable & Self::ALLOWABLE_BITS,
-        //         u64x2::splat(0),
-        //         [0, 1, 2, 3]
-        //     );
-        // }
+        let allowable = !self.protected();
+        if S.length() == 1 {
+            return simd_swizzle!(
+                allowable & Self::ALLOWABLE_BITS,
+                u64x2::splat(0),
+                [0, 1, 2, 3]
+            );
+        }
 
         let allowable = !self.protected();
 
@@ -159,138 +176,105 @@ impl BitBoard {
             let high = (1 << ((7 - S.length()) * SIZE)) - 1; // when the ship length is over 1 the top rows are cut off
             u64x2::from_array([low, high])
         };
-        // ToDo add final masks
         total_allowable &= simd_swizzle!(x_ship_mask, y_ship_mask, [0, 1, 2, 3]);
 
         total_allowable
-
-        // let allowable = !self.protected();
-        // let mut ship_placements_x = allowable;
-        // for i in 1..S.length() as u64 {
-        //     ship_placements_x &= allowable >> i;
-        // }
-
-        // let mut ship_placements_y = allowable;
-        // for i in 1..S.length() {
-        //     let high = allowable[1];
-        //     let high_shifted_by_one = high >> SIZE;
-
-        //     let low_shifted_by_one = (allowable[0] >> SIZE) & ((1 << 30) - 1); // I need this mask to stop over allovance by the invertation of inverted
-        //     let low_with_high = low_shifted_by_one | (high << 30);
-        //     // let low_with_high = (allowable[0] >> SIZE);
-
-        //     ship_placements_y &=
-        //         u64x2::from_array([low_with_high, high_shifted_by_one]) >> ((i - 1) * SIZE) as u64;
-        // }
-
-        // // let mut ship_placements_x = simd_swizzle!(total_allowable, [0, 1]);
-        // // let mut ship_placements_y = simd_swizzle!(total_allowable, [2, 3]);
-
-        // let x_ship_mask = {
-        //     let mut mask = 0u128;
-        //     let single_row_allowable = (1 << (SIZE - (S.length() - 1))) - 1;
-        //     for y in 0..SIZE {
-        //         let bit_index = BitBoard::map_index_to_bit_index(y * SIZE);
-        //         mask |= single_row_allowable << bit_index;
-        //     }
-        //     unsafe { transmute::<u128, u64x2>(mask) }
-        // };
-        // ship_placements_x &= x_ship_mask;
-        // let y_ship_mask = {
-        //     let low = (1 << (4 * SIZE)) - 1; // group of the lower 4 rows
-        //     let high = (1 << ((7 - S.length()) * SIZE)) - 1; // when the ship length is over 1 the top rows are cut off
-        //     u64x2::from_array([low, high])
-        // };
-        // ship_placements_y &= y_ship_mask;
-
-        // u64x4::from_array([
-        //     ship_placements_x[0],
-        //     ship_placements_x[1],
-        //     ship_placements_y[0],
-        //     ship_placements_y[1],
-        // ])
     }
     #[inline(never)]
     pub fn random_place_ship<const S: Ship>(&mut self, random_value: u32) {
         // pub fn random_place_ship<const S: Ship>(&mut self, ship: Ship, random_value: u32) {
         let ship_placements = self.allowable_ship_placements::<S>();
 
-        // if S.length() == 1 {
-        //     let length = ship_placements[0].count_ones() + ship_placements[1].count_ones();
-        //     unsafe {
-        //         std::hint::assert_unchecked(length != 0);
-        //     }
-        //     let total_index = random_value % length;
+        if S.length() == 1 {
+            let length = ship_placements[0].count_ones() + ship_placements[1].count_ones();
+            unsafe {
+                std::hint::assert_unchecked(length != 0);
+            }
+            let total_index = random_value % length;
 
-        //     let index =
-        //         nth_set_bit_u64x2(simd_swizzle!(ship_placements, [0, 1]), total_index) as usize;
-        //     self.place_ship(index, S);
-        //     return;
-        // }
-
-        // let ship_counts: u64x4 = unsafe { _mm256_popcnt_epi64(ship_placements.into()) }.into();
-
-        // let ship_counts_shift_1 =
-        //     ship_counts + std::simd::simd_swizzle!(ship_counts, u64x4::splat(0), [4, 0, 1, 2]);
-        // let ship_counts_all = ship_counts_shift_1
-        //     + std::simd::simd_swizzle!(ship_counts_shift_1, u64x4::splat(0), [4, 4, 0, 1]);
-
-        // let sum = ship_counts_all[3] as u32;
-
-        // unsafe {
-        //     std::hint::assert_unchecked(sum != 0);
-        // }
-        // let total_index = random_value % sum;
-
-        // let bit_field_index = ship_counts_all
-        //     .simd_gt(u64x4::splat(total_index as u64))
-        //     .to_bitmask()
-        //     .count_ones();
-        // let over_total_index = ship_counts_all
-        //     .simd_gt(u64x4::splat(total_index as u64))
-        //     .to_bitmask();
-
-        // let shiftet_ship_placements: u64x4 = unsafe {
-        //     std::arch::x86_64::_mm256_maskz_compress_epi64(
-        //         over_total_index as u8,
-        //         ship_placements.into(),
-        //     )
-        // }
-        // .into();
-        // let shiftet_ship_counts_all: u64x4 = unsafe {
-        //     std::arch::x86_64::_mm256_maskz_compress_epi64(
-        //         over_total_index as u8,
-        //         ship_counts_all.into(),
-        //     )
-        // }
-        // .into();
-        // let shiftet_ship_counts_all_corrected = shiftet_ship_counts_all - ship_counts_all;
-        // let offset = total_index - shiftet_ship_counts_all_corrected[0] as u32;
-        // let bit_field = shiftet_ship_placements[0];
-        // let index = nth_set_bit_index_u64(bit_field, offset) + bit_field_index;
-        // self.place_ship(index as usize, S)
-
-        let x_ships = ship_placements[0].count_ones() + ship_placements[1].count_ones();
-        let y_ships = ship_placements[2].count_ones() + ship_placements[3].count_ones();
-
-        let total_possibilities = x_ships + y_ships;
-        unsafe {
-            std::hint::assert_unchecked(total_possibilities != 0);
+            let index =
+                nth_set_bit_u64x2(simd_swizzle!(ship_placements, [0, 1]), total_index) as usize;
+            self.place_ship(index, S);
+            return;
         }
-        let total_index = random_value % total_possibilities;
 
-        let (bit_map, index, offset) = if total_index < x_ships {
-            (simd_swizzle!(ship_placements, [0, 1]), total_index, 0)
+        let ship_counts = if cfg!(any(
+            target_feature = "avx512vpopcntdq",
+            target_feature = "avx512vl"
+        )) {
+            let ship_counts: u64x4 = unsafe { _mm256_popcnt_epi64(ship_placements.into()) }.into();
+            ship_counts
         } else {
-            (
-                simd_swizzle!(ship_placements, [2, 3]),
-                total_index - x_ships,
-                128,
-            ) // there is a brache for ship_placments because ther are 128 and not 64 but and thus can't be move by cmov
+            u64x4::from_array(
+                ship_placements
+                    .to_array()
+                    .map(|val| val.count_ones() as u64),
+            )
         };
-        let index = nth_set_bit_u64x2(bit_map, index) as usize + offset;
 
-        self.place_ship(index as usize, S)
+        let ship_index = if cfg!(any(target_feature = "avx512f")) {
+            let ship_counts_shift_1 =
+                ship_counts + std::simd::simd_swizzle!(ship_counts, u64x4::splat(0), [4, 0, 1, 2]);
+            let ship_counts_all = ship_counts_shift_1
+                + std::simd::simd_swizzle!(ship_counts_shift_1, u64x4::splat(0), [4, 4, 0, 1]);
+
+            let sum = ship_counts_all[3] as u32;
+
+            unsafe {
+                std::hint::assert_unchecked(sum != 0);
+            }
+            let total_index = random_value % sum;
+
+            let bit_field_index = ship_counts_all
+                .simd_gt(u64x4::splat(total_index as u64))
+                .to_bitmask()
+                .count_ones();
+            let over_total_index = ship_counts_all
+                .simd_gt(u64x4::splat(total_index as u64))
+                .to_bitmask();
+
+            let shiftet_ship_placements: u64x4 = unsafe {
+                std::arch::x86_64::_mm256_maskz_compress_epi64(
+                    over_total_index as u8,
+                    ship_placements.into(),
+                )
+            }
+            .into();
+            let shiftet_ship_counts_all: u64x4 = unsafe {
+                std::arch::x86_64::_mm256_maskz_compress_epi64(
+                    over_total_index as u8,
+                    ship_counts_all.into(),
+                )
+            }
+            .into();
+            let bit_index_to_select = total_index - shiftet_ship_counts_all[0] as u32;
+            let bit_field = shiftet_ship_placements[0];
+            (nth_set_bit_index_u64(bit_field, bit_index_to_select) + bit_field_index * 64) as usize
+        } else {
+            let x_ships = (ship_counts[0] + ship_counts[1]) as u32;
+            let y_ships = (ship_counts[2] + ship_counts[3]) as u32;
+            // let x_ships = ship_placements[0].count_ones() + ship_placements[1].count_ones();
+            // let y_ships = ship_placements[2].count_ones() + ship_placements[3].count_ones();
+
+            let total_possibilities = x_ships + y_ships;
+            unsafe {
+                std::hint::assert_unchecked(total_possibilities != 0);
+            }
+            let total_index = random_value % total_possibilities;
+
+            let (bit_map, index, offset) = if total_index < x_ships {
+                (simd_swizzle!(ship_placements, [0, 1]), total_index, 0)
+            } else {
+                (
+                    simd_swizzle!(ship_placements, [2, 3]),
+                    total_index - x_ships,
+                    128,
+                ) // there is a brache for ship_placments because ther are 128 and not 64 but and thus can't be move by cmov
+            };
+            nth_set_bit_u64x2(bit_map, index) as usize + offset
+        };
+
+        self.place_ship(ship_index as usize, S)
     }
 }
 
