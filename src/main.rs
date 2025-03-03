@@ -110,8 +110,8 @@ fn main() {
     //     Box::new(placed_ships)
     // });
 
-    let iterations = 24_000_000u64;
-    // let iterations = 140_000_000u64;
+    // let iterations = 24_000_000u64;
+    let iterations = 180_000_000u64;
 
     let mut start_board = Board::new();
     let mut start_ships = SHIPS.to_vec();
@@ -160,7 +160,7 @@ fn main() {
         let x = max_index % SIZE;
         let y = max_index / SIZE;
 
-        let mut buf = *b"Max (x, y): (A,  0)";
+        let mut buf = *b"Max (x, y): (A,  0)\n";
         buf[13] = x as u8 + b'A';
         if y == 10 {
             buf[16] = b'1';

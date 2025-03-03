@@ -198,10 +198,11 @@ impl BitBoard {
             return;
         }
 
-        let ship_counts = if cfg!(any(
-            target_feature = "avx512vpopcntdq",
-            target_feature = "avx512vl"
-        )) {
+        let ship_counts = if false {
+            // let ship_counts = if cfg!(any(
+            //     target_feature = "avx512vpopcntdq",
+            //     target_feature = "avx512vl"
+            // )) {
             let ship_counts: u64x4 = unsafe { _mm256_popcnt_epi64(ship_placements.into()) }.into();
             ship_counts
         } else {
@@ -212,7 +213,8 @@ impl BitBoard {
             )
         };
 
-        let ship_index = if cfg!(any(target_feature = "avx512f")) {
+        let ship_index = if false {
+            // let ship_index = if cfg!(any(target_feature = "avx512f")) {
             let ship_counts_shift_1 =
                 ship_counts + std::simd::simd_swizzle!(ship_counts, u64x4::splat(0), [4, 0, 1, 2]);
             let ship_counts_all = ship_counts_shift_1
