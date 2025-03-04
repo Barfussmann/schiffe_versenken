@@ -12,45 +12,13 @@ pub static PLACED_SHIPS: LazyLock<Box<[[Board; 256]; 4]>> = LazyLock::new(|| {
             for y in 0..SIZE {
                 for x in 0..SIZE {
                     let index = dir as usize * 128 + y * 10 + x;
-                    placed_ships[ship.index][index].const_place_ship(x, y, dir, *ship);
+                    placed_ships[ship.index()][index].const_place_ship(x, y, dir, *ship);
                 }
             }
         }
     }
     Box::new(placed_ships)
 });
-// pub static PLACED_SHIPS: [[Board; 256]; 10] = {
-//     let mut placed_ships = [[Board::new(); 256]; 10];
-
-//     let mut ship_i = 0;
-//     while ship_i < SHIPS.len() {
-//         let ship = SHIPS[ship_i];
-//         let ship_index = ship.index;
-//         let mut dir_i = 0;
-//         while dir_i < 2 {
-//             let mut y = 0;
-//             while y < SIZE {
-//                 let mut x = 0;
-//                 while x < SIZE {
-//                     let dir = match dir_i {
-//                         0 => Direction::Horizontal,
-//                         1 => Direction::Vetrical,
-//                         _ => unreachable!(),
-//                     };
-
-//                     let index = dir_i * 128 + y * 10 + x;
-//                     placed_ships[ship_index][index].const_place_ship(x, y, dir, ship);
-
-//                     x += 1;
-//                 }
-//                 y += 1;
-//             }
-//             dir_i += 1;
-//         }
-//         ship_i += 1;
-//     }
-//     placed_ships
-// };
 
 #[derive(Debug, Clone, Copy)]
 pub enum Direction {
@@ -118,7 +86,7 @@ impl Board {
                 width = 3;
                 height = ship.length() + 2;
             }
-        };
+        }
         if x == 0 {
             width -= 1;
         }
@@ -167,7 +135,7 @@ impl Display for Board {
         f.write_char('\n')?;
         for row in self.cells.chunks(SIZE).take(SIZE) {
             for cell in row {
-                f.write_fmt(format_args!("{}", cell))?;
+                f.write_fmt(format_args!("{cell}"))?;
             }
             f.write_char('\n')?;
         }

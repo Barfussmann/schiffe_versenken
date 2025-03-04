@@ -5,15 +5,11 @@ edition = "2024"
 
 [dependencies]
 num-format = "0.4.4"
-rand = { version = "0.8.5", features = [
-    "small_rng",
-    "std",
-    "std_rng",
+rand = { version = "0.9.0", features = [
+    "thread_rng",
 ], default-features = false }
 
-
-rayon = { version = "1.10.0", optional = true }
-# rayon = "1.10.0"
+rayon = "1.10.0"
 
 
 [profile.release]
@@ -21,12 +17,12 @@ rayon = { version = "1.10.0", optional = true }
 # incremental = true
 # lto = "fat"
 
-opt-level = 3
+opt-level = 2
 # lto = "fat"
-# codegen-units = 1
+codegen-units = 1
 # panic = "abort"
 # strip = true
-debug = 2
+# debug = 2
 
 
 # inherits = true
@@ -37,11 +33,3 @@ debug = 2
 
 [profile.release.build-override]
 # opt-level = 3
-
-[features]
-default = ["rayon", "print_formatting"]
-rayon = ["dep:rayon"]
-print_formatting = []
-panic = []
-debug_assert = []
-overflow = []
