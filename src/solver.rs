@@ -141,16 +141,13 @@ impl Solver {
 
                 let end_time = Instant::now() + time_to_run;
                 while Instant::now() < end_time {
-                    for _ in 0..100 {
-                        // amortise the cost of the time comparison. Gives 10 % speedup
-                        step(
-                            bit_board,
-                            ship_amounts,
-                            &mut ship_counts,
-                            &self.placed_bit_ships,
-                            &mut special_rng,
-                        );
-                    }
+                    step(
+                        bit_board,
+                        ship_amounts,
+                        &mut ship_counts,
+                        &self.placed_bit_ships,
+                        &mut special_rng,
+                    );
                 }
                 ship_counts
             })
