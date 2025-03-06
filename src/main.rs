@@ -38,42 +38,9 @@ mod ship;
 mod ship_counts;
 mod solver;
 
-// #[inline(never)]
-pub fn step(
-    bit_board: BitBoard,
-    ship_counts: &mut ship_counts::ShipCounts,
-    placed_bit_ships: &PlacedBitShips,
-    special_rng: &mut SpecialRng,
-) {
-    let mut board = bit_board;
-
-    board.random_place_ship::<{ Ship::new(4) }>(placed_bit_ships, special_rng);
-    board.random_place_ship::<{ Ship::new(3) }>(placed_bit_ships, special_rng);
-    board.random_place_ship::<{ Ship::new(3) }>(placed_bit_ships, special_rng);
-    board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng);
-    board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng);
-    board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng);
-    board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-    board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-    board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-    board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-    // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-    // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-    // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-    // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-    // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-    // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-    // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-    // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-    // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-    // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-
-    ship_counts.add_bit_board(board);
-}
-
 fn main() {
     // rayon::ThreadPoolBuilder::new()
-    //     .num_threads(16)
+    //     .num_threads(1)
     //     .build_global()
     //     .unwrap();
 
@@ -84,4 +51,58 @@ fn main() {
         solver.run(time_to_run);
         solver.reset();
     }
+}
+
+// #[inline(never)]
+pub fn step(
+    bit_board: BitBoard,
+    ship_amounts: [u8; 4],
+    ship_counts: &mut ship_counts::ShipCounts,
+    placed_bit_ships: &PlacedBitShips,
+    special_rng: &mut SpecialRng,
+) {
+    let mut board = bit_board;
+
+    // board.random_place_ship::<{ Ship::new(4) }>(placed_bit_ships, special_rng);
+    // board.random_place_ship::<{ Ship::new(3) }>(placed_bit_ships, special_rng);
+    // board.random_place_ship::<{ Ship::new(3) }>(placed_bit_ships, special_rng);
+    // board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng);
+    // board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng);
+    // board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng);
+    // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
+    // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
+    // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
+    // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
+    if ship_amounts[3] > 0 {
+        board.random_place_ship::<{ Ship::new(4) }>(placed_bit_ships, special_rng);
+    }
+    if ship_amounts[2] > 0 {
+        board.random_place_ship::<{ Ship::new(3) }>(placed_bit_ships, special_rng);
+    }
+    if ship_amounts[2] > 1 {
+        board.random_place_ship::<{ Ship::new(3) }>(placed_bit_ships, special_rng);
+    }
+    if ship_amounts[1] > 0 {
+        board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng);
+    }
+    if ship_amounts[1] > 1 {
+        board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng);
+    }
+    if ship_amounts[1] > 2 {
+        board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng);
+    }
+    if ship_amounts[0] > 0 {
+        board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
+    }
+    if ship_amounts[0] > 1 {
+        board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
+    }
+    if ship_amounts[0] > 2 {
+        board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
+    }
+    if ship_amounts[0] > 3 {
+        board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
+    }
+
+    ship_counts.add_bit_board(board);
 }

@@ -30,7 +30,20 @@ impl SpecialRng {
         }
     }
     // #[inline(never)]
-    pub fn get_random(&mut self, upper_range: u8) -> u8 {
+    pub fn wide_get_random(&mut self, upper_range: u64x4) -> u64x4 {
+        let ret = unsafe {
+            std::arch::x86_64::_mm256_mulhi_epu16(self.aes_value.into(), upper_range.into())
+        }
+        .into();
+        unsafe {
+            self.aes_value =
+                std::arch::x86_64::_mm256_aesenc_epi128(self.aes_value.into(), self.aes_key.into())
+                    .into();
+        }
+        ret
+    }
+    // #[inline(never)]
+    pub fn get_random(&mut self, upper_range: u8) -> u32 {
         let ret = (self.aes_value[0] as u32)
             .widening_mul(upper_range as u32)
             .1;
@@ -39,7 +52,7 @@ impl SpecialRng {
                 std::arch::x86_64::_mm256_aesenc_epi128(self.aes_value.into(), self.aes_key.into())
                     .into();
         }
-        ret as u8
+        ret
         // self.small_rng.random_range(0..upper_range)
     }
 }
@@ -124,6 +137,7 @@ impl Solver {
             .map(|_| {
                 let mut ship_counts = ship_counts::ShipCounts::new();
                 let mut special_rng = SpecialRng::new();
+                let ship_amounts = std::hint::black_box([4, 3, 2, 1]);
 
                 let end_time = Instant::now() + time_to_run;
                 while Instant::now() < end_time {
@@ -131,6 +145,7 @@ impl Solver {
                         // amortise the cost of the time comparison. Gives 10 % speedup
                         step(
                             bit_board,
+                            ship_amounts,
                             &mut ship_counts,
                             &self.placed_bit_ships,
                             &mut special_rng,
