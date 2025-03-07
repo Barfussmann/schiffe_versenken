@@ -15,6 +15,7 @@ use std::time::Duration;
 use bit_board::BitBoard;
 use board::Board;
 use ship::Ship;
+use ship_counts::ShipCountsSmall;
 use solver::{PlacedBitShips, Solver, SpecialRng};
 
 const SIZE: usize = 10;
@@ -39,10 +40,10 @@ mod ship_counts;
 mod solver;
 
 fn main() {
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(16)
-        .build_global()
-        .unwrap();
+    // rayon::ThreadPoolBuilder::new()
+    //     .num_threads(1)
+    //     .build_global()
+    //     .unwrap();
 
     let mut solver = Solver::new();
 
@@ -62,10 +63,17 @@ pub fn step(
     placed_bit_ships: &PlacedBitShips,
     special_rng: &mut SpecialRng,
 ) {
-    for _ in 0..100 {
-        // amortise the cost of the time comparison. Gives 10 % speedup
-        let mut boards = [bit_board; 7];
-        // let mut board = [bit_board; 8];
+    const LOOP_PARALLELISM: usize = 6;
+    const LOOP_ITERATIONS: usize = 255 / LOOP_PARALLELISM;
+
+    let iterations = LOOP_ITERATIONS * LOOP_PARALLELISM;
+
+    let mut small_counts = ShipCountsSmall::new();
+
+    // amortise the cost of the time comparison of the loop outside the function. Gives 10 % speedup
+    for _ in 0..LOOP_ITERATIONS { // only can sum up to 255 in the ship_counts
+        // random_place ship is short enough to fit allow multiple executions in the cpu at once without dependency on the previous random_place_ship
+        let mut boards = [bit_board; LOOP_PARALLELISM];
 
 
         if ship_amounts[3] > 0 {  for board in &mut boards {  board.random_place_ship::<{ Ship::new(4) }>(placed_bit_ships, special_rng);  }  }
@@ -80,17 +88,6 @@ pub fn step(
         if ship_amounts[0] > 3 {  for board in &mut boards {  board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);  }  }
 
 
-        // board.random_place_ship::<{ Ship::new(4) }>(placed_bit_ships, special_rng);
-        // board.random_place_ship::<{ Ship::new(3) }>(placed_bit_ships, special_rng);
-        // board.random_place_ship::<{ Ship::new(3) }>(placed_bit_ships, special_rng);
-        // board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng);
-        // board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng);
-        // board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng);
-        // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-        // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-        // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-        // board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);
-        //
         // if ship_amounts[3] > 0 { board.random_place_ship::<{ Ship::new(4) }>(placed_bit_ships, special_rng); }
         // if ship_amounts[2] > 0 { board.random_place_ship::<{ Ship::new(3) }>(placed_bit_ships, special_rng); }
         // if ship_amounts[1] > 0 { board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng); }
@@ -108,8 +105,9 @@ pub fn step(
         // if ship_amounts[0] > 3 { board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng); }
 
         for board in &boards {
-            ship_counts.add_bit_board(*board);
+            small_counts.add_bit_board(*board);
         }
         // ship_counts.add_bit_board(board);
     }
+    ship_counts.add_small_counts(small_counts, iterations as u64);
 }

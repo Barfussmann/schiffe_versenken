@@ -4,7 +4,6 @@ use crate::{BOARD_SIZE, SHIPS, SIZE};
 
 use std::fmt::Display;
 use std::fmt::Write;
-use std::mem::transmute;
 use std::simd::u64x2;
 use std::sync::LazyLock;
 
@@ -74,24 +73,24 @@ impl Board {
         let shifts_x: Vec<usize> = (0..S.length()).collect();
         let shifts_y: Vec<usize> = (0..S.length() * SIZE).step_by(SIZE).collect();
 
-        // let x_ship_mask = {
-        //     let mut mask = 0u128;
-        //     let single_row_allowable = (1 << (SIZE - (S.length() - 1))) - 1;
-        //     for y in 0..SIZE {
-        //         let bit_index = BitBoard::map_index_to_bit_index(y * SIZE);
-        //         mask |= single_row_allowable << bit_index;
-        //     }
-        //     unsafe { transmute::<u128, u64x2>(mask) }
-        // };
-        // let y_ship_mask = {
-        //     let low = (1 << (4 * SIZE)) - 1; // group of the lower 4 rows
-        //     let high = (1 << ((7 - S.length()) * SIZE)) - 1; // when the ship length is over 1 the top rows are cut off
-        //     u64x2::from_array([low, high])
-        // };
+        let x_ship_mask = {
+            let mut mask = 0u128;
+            let single_row_allowable = (1 << (SIZE - (S.length() - 1))) - 1;
+            for y in 0..SIZE {
+                let bit_index = BitBoard::map_index_to_bit_index(y * SIZE);
+                mask |= single_row_allowable << bit_index;
+            }
+            unsafe { std::mem::transmute::<u128, u64x2>(mask) }
+        };
+        let y_ship_mask = {
+            let low = (1 << (4 * SIZE)) - 1; // group of the lower 4 rows
+            let high = (1 << ((7 - S.length()) * SIZE)) - 1; // when the ship length is over 1 the top rows are cut off
+            u64x2::from_array([low, high])
+        };
 
         (
-            self.multishift(&shifts_x).to_u64x2(Cell::Protected),
-            self.multishift(&shifts_y).to_u64x2(Cell::Protected),
+            !self.multishift(&shifts_x).to_u64x2(Cell::Protected) & x_ship_mask,
+            !self.multishift(&shifts_y).to_u64x2(Cell::Protected) & y_ship_mask,
         )
     }
     fn multishift(&self, amounts: &[usize]) -> Self {
@@ -112,9 +111,6 @@ impl Board {
         let mut val = 0u128;
 
         for i in 0..u128::BITS as usize {
-            // if i >= 40 && i < 60 && cell_type == self.cells[i] {
-            //     val |= 1 << i;
-            // }
             let bit_index = BitBoard::map_index_to_bit_index(i);
 
             if cell_type == self.cells[i] {

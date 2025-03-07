@@ -6,12 +6,34 @@ use super::BOARD_SIZE;
 use super::SIZE;
 use std::fmt::Display;
 use std::fmt::Write;
-use std::hint::black_box;
 use std::iter::zip;
+use std::simd::mask8x64;
+use std::simd::num::SimdInt;
+use std::simd::u8x64;
+
+#[derive(Debug, Clone)]
+pub struct ShipCountsSmall {
+    small_counts: [u8x64; 2],
+}
+impl ShipCountsSmall {
+    pub fn new() -> ShipCountsSmall {
+        ShipCountsSmall {
+            small_counts: [u8x64::splat(0); 2],
+        }
+    }
+    // #[inline(never)]
+    pub fn add_bit_board(&mut self, board: BitBoard) {
+        let ship = !board.ship();
+
+        self.small_counts[0] -= mask8x64::from_bitmask(ship[0]).to_int().cast();
+        self.small_counts[1] -= mask8x64::from_bitmask(ship[1]).to_int().cast();
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct ShipCounts {
     pub counts: [u64; BOARD_SIZE],
+    small_counts: [u8x64; 2],
     pub board_count: u64,
 }
 
@@ -19,6 +41,7 @@ impl ShipCounts {
     pub fn new() -> ShipCounts {
         ShipCounts {
             counts: [0; BOARD_SIZE],
+            small_counts: [u8x64::splat(0); 2],
             board_count: 0,
         }
     }
@@ -33,18 +56,19 @@ impl ShipCounts {
         }
         self.board_count += 1;
     }
-    #[inline(never)]
-    pub fn add_bit_board(&mut self, board: BitBoard) {
-        // black_box(board);
+    pub fn add_small_counts(&mut self, small_counts: ShipCountsSmall, count: u64) {
         for i in 0..40 {
-            self.counts[i] += ((board.ship()[0] & (1 << i)) != 0) as u64;
+            self.counts[i] += small_counts.small_counts[0][i] as u64;
         }
         // high bits
         for i in 0..60 {
-            self.counts[i + 40] += ((board.ship()[1] & (1 << i)) != 0) as u64;
+            self.counts[i + 40] += small_counts.small_counts[1][i] as u64;
         }
-
-        self.board_count += 1;
+        assert!(
+            count < 256,
+            "added count is to big. The result could be wrong"
+        );
+        self.board_count += count;
     }
     pub fn add_other_count(&mut self, other: Self) {
         for (self_count, other_count) in zip(&mut self.counts, &other.counts) {
