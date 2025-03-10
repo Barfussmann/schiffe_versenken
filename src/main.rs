@@ -13,7 +13,8 @@ mod board;
 
 use std::time::Duration;
 
-use bit_board::{BitBoard, DoubleBitBoard};
+#[allow(unused)]
+use bit_board::{BitBoard, DoubleBitBoard, OctaBitBoard};
 use board::Board;
 use ship::Ship;
 use ship_counts::ShipCountsSmall;
@@ -64,22 +65,25 @@ pub fn step(
     placed_bit_ships: &PlacedBitShips,
     special_rng: &mut SpecialRng,
 ) {
-    // const LOOP_PARALLELISM: usize = 6;
-    // const LOOP_ITERATIONS: usize = 255 / LOOP_PARALLELISM ;
-    // const ITERATIONS: usize = LOOP_ITERATIONS * LOOP_PARALLELISM;
-    const INSTRUCTION_PARALLELISM: usize = 2;
-    const LOOP_PARALLELISM: usize = 7;
+    // const LOOP_PARALLELISM: usize = 1;
+    // const LOOP_PARALLELISM: usize = 3;
+    // const INSTRUCTION_PARALLELISM: usize = OctaBitBoard::INSTRUCTION_PARALLELISM;
+    // let octa_bit_board = OctaBitBoard::new(bit_board);
+
+    const LOOP_PARALLELISM: usize = 5;
+    const INSTRUCTION_PARALLELISM: usize = DoubleBitBoard::INSTRUCTION_PARALLELISM;
+    let double_bit_board = DoubleBitBoard::new(bit_board);
+
     const LOOP_ITERATIONS: usize = 255 / LOOP_PARALLELISM / INSTRUCTION_PARALLELISM;
     const ITERATIONS: usize = LOOP_ITERATIONS * LOOP_PARALLELISM * INSTRUCTION_PARALLELISM;
 
-    let double_bit_board = DoubleBitBoard::new(bit_board);
 
     let mut small_counts = ShipCountsSmall::new();
 
     // amortise the cost of the time comparison of the loop outside the function. Gives 10 % speedup
     for _ in 0..LOOP_ITERATIONS { // only can sum up to 255 in the ship_counts
         // random_place ship is short enough to fit allow multiple executions in the cpu at once without dependency on the previous random_place_ship
-        // let mut boards = [bit_board; LOOP_PARALLELISM];
+        // let mut boards = [octa_bit_board; LOOP_PARALLELISM];
         let mut boards = [double_bit_board; LOOP_PARALLELISM];
 
 
@@ -112,6 +116,7 @@ pub fn step(
         // if ship_amounts[0] > 3 { board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng); }
 
         for board in &boards {
+            // small_counts.add_octa_bit_board(*board);
             small_counts.add_double_bit_board(*board);
             // small_counts.add_bit_board(*board);
         }

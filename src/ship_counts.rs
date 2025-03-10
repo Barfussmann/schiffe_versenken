@@ -1,5 +1,6 @@
 use crate::bit_board::BitBoard;
 use crate::bit_board::DoubleBitBoard;
+use crate::bit_board::OctaBitBoard;
 use crate::board::Board;
 use crate::board::Cell;
 
@@ -20,6 +21,11 @@ impl ShipCountsSmall {
     pub fn new() -> ShipCountsSmall {
         ShipCountsSmall {
             small_counts: [u8x64::splat(0); 2],
+        }
+    }
+    pub fn add_octa_bit_board(&mut self, board: OctaBitBoard) {
+        for bit_board in board.boards {
+            self.add_bit_board(bit_board);
         }
     }
     pub fn add_double_bit_board(&mut self, board: DoubleBitBoard) {
