@@ -1,11 +1,11 @@
 use std::{
     iter::zip,
-    simd::u64x4,
+    simd::prelude::*,
     time::{Duration, Instant},
 };
 
 use crate::{
-    SHIPS, SIZE,
+    SIZE,
     bit_board::BitBoard,
     board::{Board, Cell, PLACED_SHIPS},
     ship_counts, step,
@@ -19,41 +19,61 @@ pub struct PlacedBitShips {
 }
 
 pub struct SpecialRng {
-    aes_key: u64x4,
-    aes_value: u64x4,
+    aes_key: u64x8,
+    aes_value: u64x8,
 }
 impl SpecialRng {
     fn new() -> Self {
         Self {
-            aes_key: u64x4::from_array(random()),
-            aes_value: u64x4::splat(0),
+            aes_key: u64x8::from_array(random()),
+            aes_value: u64x8::splat(0),
         }
     }
     // #[inline(never)]
-    pub fn wide_get_random(&mut self, upper_range: u64x4) -> u64x4 {
+    pub fn extra_wide_get_random(&mut self, upper_range: u64x8) -> u64x8 {
         let ret = unsafe {
-            std::arch::x86_64::_mm256_mulhi_epu16(self.aes_value.into(), upper_range.into())
+            std::arch::x86_64::_mm512_mulhi_epu16(self.aes_value.into(), upper_range.into())
         }
         .into();
-        unsafe {
-            self.aes_value =
-                std::arch::x86_64::_mm256_aesenc_epi128(self.aes_value.into(), self.aes_key.into())
-                    .into();
-        }
+        self.step_aes();
         ret
     }
-    // #[inline(never)]
-    pub fn get_random(&mut self, upper_range: u8) -> u32 {
-        let ret = (self.aes_value[0] as u32)
-            .widening_mul(upper_range as u32)
-            .1;
+    pub fn wide_get_random(&mut self, upper_range: u64x4) -> u64x4 {
+        let ret = unsafe {
+            std::arch::x86_64::_mm256_mulhi_epu16(
+                simd_swizzle!(self.aes_value, [0, 1, 2, 3]).into(),
+                upper_range.into(),
+            )
+        }
+        .into();
+        self.step_aes();
+        ret
+    }
+    pub fn get_random_u16(&mut self, upper_range: u16x8) -> u16x8 {
+        let ret = unsafe {
+            std::arch::x86_64::_mm_mulhi_epu16(
+                simd_swizzle!(self.aes_value, [0, 1]).into(),
+                upper_range.into(),
+            )
+        }
+        .into();
+        self.step_aes();
+        ret
+    }
+    pub fn extra_wide_get_random_u16_(&mut self, upper_range: u16x32) -> u16x32 {
+        let ret = unsafe {
+            std::arch::x86_64::_mm512_mulhi_epu16(self.aes_value.into(), upper_range.into())
+        }
+        .into();
+        self.step_aes();
+        ret
+    }
+    fn step_aes(&mut self) {
         unsafe {
             self.aes_value =
-                std::arch::x86_64::_mm256_aesenc_epi128(self.aes_value.into(), self.aes_key.into())
+                std::arch::x86_64::_mm512_aesenc_epi128(self.aes_value.into(), self.aes_key.into())
                     .into();
         }
-        ret
-        // self.small_rng.random_range(0..upper_range)
     }
 }
 
@@ -74,7 +94,7 @@ impl Solver {
         for ship_i in 0..PLACED_SHIPS.len() {
             for dir in 0..2 {
                 for i in 0..128 {
-                    let bit_board_offset = BitBoard::map_index_to_bit_index(i);
+                    let bit_board_offset = Board::map_index_to_bit_index(i);
                     let bit_board_index = dir * 128 + bit_board_offset;
 
                     let index = dir * 128 + i;
@@ -86,13 +106,6 @@ impl Solver {
             }
         }
         PlacedBitShips { placed_ships }
-    }
-    fn gen_random_values(length: u64) -> Box<[u32]> {
-        let random_values: Box<[u32]> = (0..length * SHIPS.len() as u64)
-            .into_par_iter()
-            .map(|_| random())
-            .collect();
-        random_values
     }
     pub fn reset(&mut self) {
         self.current_board = Board::new();

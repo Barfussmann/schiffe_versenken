@@ -1,4 +1,3 @@
-use crate::bit_board::BitBoard;
 use crate::ship::Ship;
 use crate::{BOARD_SIZE, SHIPS, SIZE};
 
@@ -59,6 +58,13 @@ impl Board {
             cells: [Cell::Water; BOARD_SIZE],
         }
     }
+    pub const fn map_index_to_bit_index(index: usize) -> usize {
+        if index < 40 {
+            index
+        } else {
+            (index - 40) + 64 // put it into the next u64 to make further calculations easier
+        }
+    }
     pub fn to_protected(mut self) -> Self {
         for cell in &mut self.cells {
             *cell = match cell {
@@ -77,7 +83,7 @@ impl Board {
             let mut mask = 0u128;
             let single_row_allowable = (1 << (SIZE - (S.length() - 1))) - 1;
             for y in 0..SIZE {
-                let bit_index = BitBoard::map_index_to_bit_index(y * SIZE);
+                let bit_index = Self::map_index_to_bit_index(y * SIZE);
                 mask |= single_row_allowable << bit_index;
             }
             unsafe { std::mem::transmute::<u128, u64x2>(mask) }
@@ -111,7 +117,7 @@ impl Board {
         let mut val = 0u128;
 
         for i in 0..u128::BITS as usize {
-            let bit_index = BitBoard::map_index_to_bit_index(i);
+            let bit_index = Self::map_index_to_bit_index(i);
 
             if cell_type == self.cells[i] {
                 val |= 1 << bit_index;
@@ -213,26 +219,5 @@ impl Display for Board {
             f.write_char('\n')?;
         }
         Ok(())
-    }
-}
-
-pub fn set_protecet_at_offsets(
-    x: usize,
-    y: usize,
-    start_board: &mut Board,
-    offsets: [(i32, i32); 4],
-) {
-    for corner_offset in offsets {
-        let corner_x = x as i32 + corner_offset.0;
-        let corner_y = y as i32 + corner_offset.1;
-        let range = 0..SIZE as i32;
-        if !range.contains(&corner_x) | !range.contains(&corner_y) {
-            continue;
-        }
-        let cell = &mut start_board.cells[Board::cell_index(corner_x as usize, corner_y as usize)];
-        match cell {
-            Cell::Water => *cell = Cell::Protected,
-            Cell::Protected | Cell::Ship | Cell::ShipHit => {}
-        }
     }
 }

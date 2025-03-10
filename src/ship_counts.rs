@@ -1,4 +1,5 @@
 use crate::bit_board::BitBoard;
+use crate::bit_board::DoubleBitBoard;
 use crate::board::Board;
 use crate::board::Cell;
 
@@ -21,6 +22,10 @@ impl ShipCountsSmall {
             small_counts: [u8x64::splat(0); 2],
         }
     }
+    pub fn add_double_bit_board(&mut self, board: DoubleBitBoard) {
+        self.add_bit_board(board.boards[0]);
+        self.add_bit_board(board.boards[1]);
+    }
     // #[inline(never)]
     pub fn add_bit_board(&mut self, board: BitBoard) {
         let ship = !board.ship();
@@ -33,7 +38,6 @@ impl ShipCountsSmall {
 #[derive(Debug, Clone)]
 pub struct ShipCounts {
     pub counts: [u64; BOARD_SIZE],
-    small_counts: [u8x64; 2],
     pub board_count: u64,
 }
 
@@ -41,7 +45,6 @@ impl ShipCounts {
     pub fn new() -> ShipCounts {
         ShipCounts {
             counts: [0; BOARD_SIZE],
-            small_counts: [u8x64::splat(0); 2],
             board_count: 0,
         }
     }

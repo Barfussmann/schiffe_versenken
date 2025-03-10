@@ -1,48 +1,90 @@
+use std::{
+    arch::x86_64::{self},
+    simd::{ToBytes, num::SimdInt, prelude::*},
+};
 #[allow(unused)]
 use std::{
-    arch::x86_64::_mm256_popcnt_epi64,
+    arch::x86_64::{_mm256_popcnt_epi64, _mm512_popcnt_epi64},
     mem::transmute,
-    simd::{
-        Mask, Swizzle, cmp::SimdPartialOrd, i32x8, i64x8, mask32x8, num::SimdUint, simd_swizzle,
-        u64x2, u64x4, u64x16,
-    },
-    sync::LazyLock,
+    simd::{Mask, Swizzle, cmp::SimdPartialOrd, num::SimdUint, simd_swizzle},
 };
 
 use super::Board;
 use crate::solver::{PlacedBitShips, SpecialRng};
-use crate::{
-    board::{Cell, PLACED_SHIPS},
-    ship::Ship,
-};
-
-pub static PLACED_BITS_SHIPS: LazyLock<Box<[[BitBoard; 256]; 4]>> = LazyLock::new(|| {
-    let mut placed_ships = [[BitBoard::new(Board::new()); 256]; 4];
-    for ship_i in 0..PLACED_SHIPS.len() {
-        for dir in 0..2 {
-            for i in 0..128 {
-                let bit_board_offset = BitBoard::map_index_to_bit_index(i);
-                let bit_board_index = dir * 128 + bit_board_offset;
-
-                let index = dir * 128 + i;
-                if bit_board_index < 256 {
-                    placed_ships[ship_i][bit_board_index] =
-                        BitBoard::new(PLACED_SHIPS[ship_i][index]);
-                }
-            }
-        }
-    }
-    Box::new(placed_ships)
-});
+use crate::{board::Cell, ship::Ship};
 
 #[derive(Clone, Copy)]
-#[repr(align(32))]
+pub struct OctaBitBoard {
+    pub boards: [BitBoard; 8],
+}
+impl OctaBitBoard {
+    pub fn new(board: BitBoard) -> Self {
+        Self { boards: [board; 8] }
+    }
+    fn place_ship<const S: Ship>(&mut self, indecies: [u32; 8], placed_bit_ships: &PlacedBitShips) {
+        self.boards[0].place_ship::<S>(indecies[0] as usize, placed_bit_ships);
+        self.boards[1].place_ship::<S>(indecies[1] as usize, placed_bit_ships);
+        self.boards[2].place_ship::<S>(indecies[2] as usize, placed_bit_ships);
+        self.boards[3].place_ship::<S>(indecies[3] as usize, placed_bit_ships);
+        self.boards[4].place_ship::<S>(indecies[4] as usize, placed_bit_ships);
+        self.boards[5].place_ship::<S>(indecies[5] as usize, placed_bit_ships);
+        self.boards[6].place_ship::<S>(indecies[6] as usize, placed_bit_ships);
+        self.boards[7].place_ship::<S>(indecies[7] as usize, placed_bit_ships);
+    }
+    fn allowable<const S: Ship>(&self) -> [u64x8; 4] {
+        [
+            simd_swizzle!(
+                self.boards[0].allowable::<S>(),
+                self.boards[1].allowable::<S>(),
+                [0, 1, 2, 3, 4, 5, 6, 7]
+            ),
+            simd_swizzle!(
+                self.boards[2].allowable::<S>(),
+                self.boards[3].allowable::<S>(),
+                [0, 1, 2, 3, 4, 5, 6, 7]
+            ),
+            simd_swizzle!(
+                self.boards[4].allowable::<S>(),
+                self.boards[5].allowable::<S>(),
+                [0, 1, 2, 3, 4, 5, 6, 7]
+            ),
+            simd_swizzle!(
+                self.boards[6].allowable::<S>(),
+                self.boards[7].allowable::<S>(),
+                [0, 1, 2, 3, 4, 5, 6, 7]
+            ),
+        ]
+    }
+    pub fn random_place_ship<const S: Ship>(
+        &mut self,
+        placed_bit_ships: &PlacedBitShips,
+        special_rng: &mut SpecialRng,
+    ) {
+        let ship_placements = self.allowable::<S>();
+
+        let possible_placements_counts: [u16x8; 4] = unsafe {
+            [
+                i64x8::from(_mm512_popcnt_epi64(ship_placements[0].into())).cast(),
+                i64x8::from(_mm512_popcnt_epi64(ship_placements[1].into())).cast(),
+                i64x8::from(_mm512_popcnt_epi64(ship_placements[2].into())).cast(),
+                i64x8::from(_mm512_popcnt_epi64(ship_placements[3].into())).cast(),
+            ]
+        };
+        let possible_placements_counts: u16x32 = unsafe { transmute(possible_placements_counts) };
+
+        let ship_indecies =
+            octa_nth_set_bit_u64x4(ship_placements, possible_placements_counts, special_rng);
+
+        self.place_ship::<S>(ship_indecies, placed_bit_ships);
+    }
+}
+
+#[derive(Clone, Copy)]
 pub struct BitBoard {
     pub protected_and_ship: u64x16,
 }
 impl BitBoard {
-    const ALLOWABLE_BITS: u64x2 = u64x2::from_array([(1 << 40) - 1, (1 << 60) - 1]);
-    pub fn allable<const S: Ship>(&self) -> u64x4 {
+    pub fn allowable<const S: Ship>(&self) -> u64x4 {
         match S.length() {
             1 => simd_swizzle!(self.protected_and_ship, [2, 3, 2, 3]),
             2 => simd_swizzle!(self.protected_and_ship, [4, 5, 6, 7]),
@@ -83,14 +125,6 @@ impl BitBoard {
             ),
         }
     }
-
-    pub const fn map_index_to_bit_index(index: usize) -> usize {
-        if index < 40 {
-            index
-        } else {
-            (index - 40) + 64 // put it into the next u64 to make further calculations easier
-        }
-    }
     // #[inline(never)]
     fn place_ship<const S: Ship>(&mut self, index: usize, placed_bit_ships: &PlacedBitShips) {
         let placed_ship_board = unsafe {
@@ -118,11 +152,15 @@ impl BitBoard {
         placed_bit_ships: &PlacedBitShips,
         special_rng: &mut SpecialRng,
     ) {
-        let ship_placements = self.allable::<S>();
+        let ship_placements = self.allowable::<S>();
+
+        let possible_placements_count: u64x4 =
+            unsafe { _mm256_popcnt_epi64(ship_placements.into()) }.into();
 
         if S.length() == 1 {
-            let length = ship_placements[0].count_ones() + ship_placements[1].count_ones();
-            let total_index = special_rng.get_random(length as u8);
+            let length =
+                possible_placements_count + possible_placements_count.shift_elements_left::<1>(0);
+            let total_index = special_rng.wide_get_random(length)[0] as u32;
 
             let index =
                 nth_set_bit_u64x2(simd_swizzle!(ship_placements, [0, 1]), total_index) as usize;
@@ -130,8 +168,6 @@ impl BitBoard {
             return;
         }
 
-        let possible_placements_count: u64x4 =
-            unsafe { _mm256_popcnt_epi64(ship_placements.into()) }.into();
         let ship_index = nth_set_bit_u64x4(ship_placements, possible_placements_count, special_rng);
 
         self.place_ship::<S>(ship_index as usize, placed_bit_ships);
@@ -139,7 +175,7 @@ impl BitBoard {
 }
 
 fn nth_set_bit_u64(bit_field: u64, n: u32) -> u32 {
-    let spread_bits = unsafe { std::arch::x86_64::_pdep_u64(1 << n, bit_field) };
+    let spread_bits = unsafe { x86_64::_pdep_u64(1u64.wrapping_shl(n), bit_field) };
     spread_bits.trailing_zeros()
 }
 // #[inline(never)]
@@ -175,12 +211,10 @@ fn nth_set_bit_u64x4(
         + over_bit_index.shift_elements_left::<2>(0));
 
     let set_bit_front: u64x4 =
-        unsafe { std::arch::x86_64::_mm256_permutexvar_epi64(u64_index.into(), set_bits.into()) }
+        unsafe { x86_64::_mm256_permutexvar_epi64(u64_index.into(), set_bits.into()) }.into();
+    let adjusted_running_sum_front: u64x4 =
+        unsafe { x86_64::_mm256_permutexvar_epi64(u64_index.into(), running_sum_adjusted.into()) }
             .into();
-    let adjusted_running_sum_front: u64x4 = unsafe {
-        std::arch::x86_64::_mm256_permutexvar_epi64(u64_index.into(), running_sum_adjusted.into())
-    }
-    .into();
 
     u64_index[0] as u32 * 64
         + nth_set_bit_u64(
@@ -189,20 +223,133 @@ fn nth_set_bit_u64x4(
         )
 }
 
-fn shift(val: u64x4, shift_amount: u64) -> u64x4 {
-    let shift = u64x4::from_array([
-        shift_amount,
-        shift_amount,
-        shift_amount * 10,
-        shift_amount * 10,
-    ]);
-    if shift_amount < 3 {
-        // only two steps can be shifted without needing the top bits from the top u64
-        val >> shift
-    } else {
-        let shifted = val >> shift;
-        let shifted_in_top_bits = simd_swizzle!(val, [0, 1, 3, 3]) << shift;
+// #[inline(never)]
+// ToDo change it to 8 at a time. You can mabey  even use a custom nth_set_bit
+fn double_nth_set_bit_u64x4(
+    set_bits: u64x8,
+    set_bits_counted_ones: u64x8,
+    special_rng: &mut SpecialRng,
+) -> [u32; 2] {
+    let small_set_counts_bits: u16x8 = set_bits_counted_ones.cast();
+    let small_set_bits_u64: u64x2 = u64x2::from_ne_bytes(small_set_counts_bits.to_ne_bytes());
 
-        shifted | shifted_in_top_bits
+    let total_sum: u16x8 =
+        unsafe { x86_64::_mm_sad_epu8(small_set_counts_bits.into(), u16x8::splat(0).into()) }
+            .into();
+
+    let bit_index_at_0_and_4 = special_rng.get_random_u16(total_sum);
+
+    // let running_sum = small_set_bits_u64;
+    let running_sum = small_set_bits_u64
+        + (small_set_bits_u64 << 16)
+        + (small_set_bits_u64 << 32)
+        + (small_set_bits_u64 << 48);
+
+    let running_sum: u16x8 = u16x8::from_ne_bytes(running_sum.to_ne_bytes());
+
+    let all_bit_index = simd_swizzle!(bit_index_at_0_and_4, [0, 0, 0, 0, 4, 4, 4, 4]);
+
+    let running_sum_adjusted = running_sum - small_set_counts_bits;
+    let over_bitindex_mask = running_sum.simd_le(all_bit_index);
+
+    let over_bitindex_compact: i16x8 = over_bitindex_mask.to_int();
+
+    let single_bit_when_over_bitindex = over_bitindex_compact & i16x8::splat(1);
+    let local_u64_index: i16x8 = unsafe {
+        x86_64::_mm_sad_epu8(single_bit_when_over_bitindex.into(), u8x16::splat(0).into())
     }
+    .into();
+    let u64_index = local_u64_index + i16x8::from_array([0, 0, 0, 0, 4, 4, 4, 4]);
+    let u64_index_wide = simd_swizzle!(u64_index, i16x8::splat(0), [0, 4, 8, 8, 8, 8, 8, 8,]);
+    let u64_index_extra_wide: i64x8 = u64_index_wide.cast();
+    let set_bit_front: u64x8 =
+        unsafe { x86_64::_mm512_permutexvar_epi64(u64_index_extra_wide.into(), set_bits.into()) }
+            .into();
+    let adjusted_running_sum_front: u16x8 = unsafe {
+        x86_64::_mm_permutexvar_epi16(u64_index_wide.into(), running_sum_adjusted.into())
+    }
+    .into();
+
+    [
+        local_u64_index[0] as u32 * 64
+            + nth_set_bit_u64(
+                set_bit_front[0],
+                (all_bit_index[0] - adjusted_running_sum_front[0]) as u32,
+            ),
+        local_u64_index[0] as u32 * 64
+            + nth_set_bit_u64(
+                set_bit_front[0],
+                (all_bit_index[0] - adjusted_running_sum_front[0]) as u32,
+            ),
+    ]
+}
+// #[inline(never)]
+// ToDo change it to 8 at a time. You can mabey  even use a custom nth_set_bit
+fn octa_nth_set_bit_u64x4(
+    set_bits: [u64x8; 4],
+    set_bits_counted_ones: u16x32,
+    special_rng: &mut SpecialRng,
+) -> [u32; 2] {
+    let small_set_bits_u64: u64x8 = u64x8::from_ne_bytes(set_bits_counted_ones.to_ne_bytes());
+
+    let total_sum: u16x32 =
+        unsafe { x86_64::_mm512_sad_epu8(set_bits_counted_ones.into(), u16x32::splat(0).into()) }
+            .into();
+
+    let bit_index_at_0_4_8_12_16_20_24_28 = special_rng.extra_wide_get_random_u16_(total_sum);
+
+    // let running_sum = small_set_bits_u64;
+    let running_sum = small_set_bits_u64
+        + (small_set_bits_u64 << 16)
+        + (small_set_bits_u64 << 32)
+        + (small_set_bits_u64 << 48);
+
+    let running_sum: u16x32 = u16x32::from_ne_bytes(running_sum.to_ne_bytes());
+
+    const OFFSETS: [usize; 32] = [
+        0, 0, 0, 0, 4, 4, 4, 4, 8, 8, 8, 8, 12, 12, 12, 12, 16, 16, 16, 16, 20, 20, 20, 20, 24, 24,
+        24, 24, 28, 28, 28, 28,
+    ];
+    let all_bit_index = simd_swizzle!(bit_index_at_0_4_8_12_16_20_24_28, OFFSETS);
+
+    let running_sum_adjusted = running_sum - set_bits_counted_ones;
+    let over_bitindex_mask = running_sum.simd_le(all_bit_index);
+
+    let over_bitindex_compact: i16x32 = over_bitindex_mask.to_int();
+
+    let single_bit_when_over_bitindex = over_bitindex_compact & i16x32::splat(1);
+    let local_u64_index: i16x32 = unsafe {
+        x86_64::_mm512_sad_epu8(single_bit_when_over_bitindex.into(), u8x64::splat(0).into())
+    }
+    .into();
+    let u64_index = local_u64_index + i16x32::from_array(OFFSETS.map(|x| x as i16));
+    let u64_index_wide: i16x32 = simd_swizzle!(
+        u64_index,
+        i16x32::splat(0),
+        [
+            0, 4, 8, 12, 16, 20, 24, 28, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32, 32,
+            32, 32, 32, 32, 32, 32, 32, 32, 32, 32
+        ]
+    );
+    let u64_index_extra_wide: i64x8 = u64_index_wide.cast();
+    let set_bit_front: u64x8 =
+        unsafe { x86_64::_mm512_permutexvar_epi64(u64_index_extra_wide.into(), set_bits.into()) }
+            .into();
+    let adjusted_running_sum_front: u16x32 = unsafe {
+        x86_64::_mm512_permutexvar_epi16(u64_index_wide.into(), running_sum_adjusted.into())
+    }
+    .into();
+
+    [
+        local_u64_index[0] as u32 * 64
+            + nth_set_bit_u64(
+                set_bit_front[0],
+                (all_bit_index[0] - adjusted_running_sum_front[0]) as u32,
+            ),
+        local_u64_index[0] as u32 * 64
+            + nth_set_bit_u64(
+                set_bit_front[0],
+                (all_bit_index[0] - adjusted_running_sum_front[0]) as u32,
+            ),
+    ]
 }

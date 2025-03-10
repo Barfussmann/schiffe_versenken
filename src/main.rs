@@ -5,6 +5,7 @@
     slice_as_chunks,
     bigint_helper_methods
 )]
+// #![allow(clippy::new_without_default)]
 #![allow(dead_code, clippy::new_without_default)]
 // #![warn(clippy::pedantic)]
 
@@ -12,7 +13,7 @@ mod board;
 
 use std::time::Duration;
 
-use bit_board::BitBoard;
+use bit_board::{BitBoard, DoubleBitBoard};
 use board::Board;
 use ship::Ship;
 use ship_counts::ShipCountsSmall;
@@ -63,17 +64,23 @@ pub fn step(
     placed_bit_ships: &PlacedBitShips,
     special_rng: &mut SpecialRng,
 ) {
-    const LOOP_PARALLELISM: usize = 6;
-    const LOOP_ITERATIONS: usize = 255 / LOOP_PARALLELISM;
+    // const LOOP_PARALLELISM: usize = 6;
+    // const LOOP_ITERATIONS: usize = 255 / LOOP_PARALLELISM ;
+    // const ITERATIONS: usize = LOOP_ITERATIONS * LOOP_PARALLELISM;
+    const INSTRUCTION_PARALLELISM: usize = 2;
+    const LOOP_PARALLELISM: usize = 7;
+    const LOOP_ITERATIONS: usize = 255 / LOOP_PARALLELISM / INSTRUCTION_PARALLELISM;
+    const ITERATIONS: usize = LOOP_ITERATIONS * LOOP_PARALLELISM * INSTRUCTION_PARALLELISM;
 
-    let iterations = LOOP_ITERATIONS * LOOP_PARALLELISM;
+    let double_bit_board = DoubleBitBoard::new(bit_board);
 
     let mut small_counts = ShipCountsSmall::new();
 
     // amortise the cost of the time comparison of the loop outside the function. Gives 10 % speedup
     for _ in 0..LOOP_ITERATIONS { // only can sum up to 255 in the ship_counts
         // random_place ship is short enough to fit allow multiple executions in the cpu at once without dependency on the previous random_place_ship
-        let mut boards = [bit_board; LOOP_PARALLELISM];
+        // let mut boards = [bit_board; LOOP_PARALLELISM];
+        let mut boards = [double_bit_board; LOOP_PARALLELISM];
 
 
         if ship_amounts[3] > 0 {  for board in &mut boards {  board.random_place_ship::<{ Ship::new(4) }>(placed_bit_ships, special_rng);  }  }
@@ -105,9 +112,10 @@ pub fn step(
         // if ship_amounts[0] > 3 { board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng); }
 
         for board in &boards {
-            small_counts.add_bit_board(*board);
+            small_counts.add_double_bit_board(*board);
+            // small_counts.add_bit_board(*board);
         }
         // ship_counts.add_bit_board(board);
     }
-    ship_counts.add_small_counts(small_counts, iterations as u64);
+    ship_counts.add_small_counts(small_counts, ITERATIONS as u64);
 }
