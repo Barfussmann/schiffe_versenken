@@ -11,8 +11,10 @@ use std::{
     simd::{Mask, Swizzle, cmp::SimdPartialOrd, num::SimdUint, simd_swizzle},
 };
 
-use super::Board;
-use crate::solver::{PlacedBitShips, SpecialRng};
+use crate::{
+    board::Board,
+    solver::{PlacedBitShips, SpecialRng},
+};
 use crate::{board::Cell, ship::Ship};
 
 #[derive(Clone, Copy)]

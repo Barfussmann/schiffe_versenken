@@ -10,31 +10,17 @@
 // #![warn(clippy::pedantic)]
 
 mod board;
-
 use std::time::Duration;
 
 #[allow(unused)]
 use bit_board::{BitBoard, DoubleBitBoard, OctaBitBoard};
-use board::Board;
+// use board::Board;
 use ship::Ship;
 use ship_counts::ShipCountsSmall;
 use solver::{PlacedBitShips, Solver, SpecialRng};
 
 const SIZE: usize = 10;
 const BOARD_SIZE: usize = (SIZE * SIZE).next_multiple_of(64);
-
-const SHIPS: &[Ship] = &[
-    Ship::new(4),
-    Ship::new(3),
-    Ship::new(3),
-    Ship::new(2),
-    Ship::new(2),
-    Ship::new(2),
-    Ship::new(1),
-    Ship::new(1),
-    Ship::new(1),
-    Ship::new(1),
-];
 
 mod bit_board;
 mod ship;
@@ -52,6 +38,7 @@ fn main() {
     let time_to_run = Duration::from_millis(1000);
     loop {
         solver.run(time_to_run);
+        // println!("{}", solver.current_board);
         solver.reset();
     }
 }

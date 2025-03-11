@@ -1,30 +1,17 @@
+use glam::{IVec2, ivec2};
+
 use crate::ship::Ship;
-use crate::{BOARD_SIZE, SHIPS, SIZE};
+use crate::{BOARD_SIZE, SIZE};
 
 use std::fmt::Display;
 use std::fmt::Write;
+use std::ops::{Index, Sub};
 use std::simd::u64x2;
-use std::sync::LazyLock;
-
-pub static PLACED_SHIPS: LazyLock<Box<[[Board; 256]; 4]>> = LazyLock::new(|| {
-    let mut placed_ships = [[Board::new(); 256]; 4];
-    for ship in SHIPS {
-        for dir in [Direction::Horizontal, Direction::Vetrical] {
-            for y in 0..SIZE {
-                for x in 0..SIZE {
-                    let index = dir as usize * 128 + y * 10 + x;
-                    placed_ships[ship.index()][index].const_place_ship(x, y, dir, *ship);
-                }
-            }
-        }
-    }
-    Box::new(placed_ships)
-});
 
 #[derive(Debug, Clone, Copy)]
 pub enum Direction {
     Horizontal = 0,
-    Vetrical = 1,
+    Vertical = 1,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -33,6 +20,41 @@ pub enum Cell {
     Protected = 1,
     ShipHit = 2,
     Ship = 3,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CellCount {
+    counts: [u64; 4],
+}
+impl CellCount {
+    pub fn new() -> Self {
+        Self { counts: [0; 4] }
+    }
+    pub fn add_cell(&mut self, cell: Cell) {
+        self.counts[cell as usize] += 1;
+    }
+}
+
+impl Index<Cell> for CellCount {
+    type Output = u64;
+
+    fn index(&self, index: Cell) -> &Self::Output {
+        &self.counts[index as usize]
+    }
+}
+impl Sub<CellCount> for CellCount {
+    type Output = CellCount;
+
+    fn sub(self, rhs: CellCount) -> Self::Output {
+        CellCount {
+            counts: [
+                self.counts[0] - rhs.counts[0],
+                self.counts[1] - rhs.counts[1],
+                self.counts[2] - rhs.counts[2],
+                self.counts[3] - rhs.counts[3],
+            ],
+        }
+    }
 }
 
 impl Display for Cell {
@@ -149,7 +171,7 @@ impl Board {
                 width = ship.length() + 2;
                 height = 3;
             }
-            Direction::Vetrical => {
+            Direction::Vertical => {
                 width = 3;
                 height = ship.length() + 2;
             }
@@ -186,7 +208,7 @@ impl Board {
 
             match direction {
                 Direction::Horizontal => x += 1,
-                Direction::Vetrical => y += 1,
+                Direction::Vertical => y += 1,
             }
 
             i += 1;
@@ -196,15 +218,56 @@ impl Board {
         x + y * SIZE
     }
 
-    pub fn swab(mut self, a: Cell, b: Cell) -> Self {
-        for cell in &mut self.cells {
-            if *cell == a {
-                *cell = b;
-            } else if *cell == b {
-                *cell = a;
+    pub fn try_place_ship(mut self, ship: &Ship, pos: IVec2, direction: Direction) -> Option<Self> {
+        let top_left = pos;
+
+        let bottom_right = pos
+            + match direction {
+                Direction::Horizontal => ivec2(ship.length() as i32 - 1, 0),
+                Direction::Vertical => ivec2(0, ship.length() as i32 - 1),
+            };
+
+        let protected_top_left =
+            (top_left - IVec2::ONE).clamp(IVec2::ZERO, IVec2::splat(SIZE as i32 - 1));
+        let protected_bottom_right =
+            (bottom_right + IVec2::ONE).clamp(IVec2::ZERO, IVec2::splat(SIZE as i32 - 1));
+
+        let mut cell_count_protected = CellCount::new();
+        self.map_rect_cells(protected_top_left, protected_bottom_right, |cell| {
+            cell_count_protected.add_cell(*cell);
+        });
+
+        let mut cell_count_ship = CellCount::new();
+        self.map_rect_cells(top_left, bottom_right, |cell| {
+            cell_count_ship.add_cell(*cell);
+        });
+
+        let only_protected = cell_count_protected - cell_count_ship;
+
+        let is_allowed = cell_count_ship[Cell::Protected] == 0         // would be placed on protected cells
+            && cell_count_ship[Cell::Ship] == 0                        // would be placed on ship cells
+            && cell_count_ship[Cell::ShipHit] != ship.length() as u64  // would only have hits those are not usefull
+            && only_protected[Cell::ShipHit] == 0; // would not use all ship hits
+
+        if !is_allowed {
+            return None;
+        }
+
+        self.map_rect_cells(top_left, bottom_right, |cell| *cell = Cell::Ship);
+
+        Some(self)
+    }
+    fn map_rect_cells(
+        &mut self,
+        top_left: IVec2,
+        bottom_right: IVec2,
+        mut f: impl FnMut(&mut Cell),
+    ) {
+        for y in top_left.y..bottom_right.y {
+            for x in top_left.x..bottom_right.x {
+                f(&mut self.cells[Self::cell_index(x as usize, y as usize)])
             }
         }
-        self
     }
 }
 

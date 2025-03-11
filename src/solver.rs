@@ -1,13 +1,15 @@
 use std::{
     iter::zip,
     simd::prelude::*,
+    sync::LazyLock,
     time::{Duration, Instant},
 };
 
 use crate::{
     SIZE,
     bit_board::BitBoard,
-    board::{Board, Cell, PLACED_SHIPS},
+    board::{Board, Cell, Direction},
+    ship::Ship,
     ship_counts, step,
 };
 use num_format::{Locale, ToFormattedString};
@@ -16,6 +18,39 @@ use rayon::prelude::*;
 
 pub struct PlacedBitShips {
     pub placed_ships: [[BitBoard; 256]; 4],
+}
+impl PlacedBitShips {
+    pub fn new() -> &'static Self {
+        const SHIPS: [Ship; 4] = [Ship::new(1), Ship::new(2), Ship::new(3), Ship::new(4)];
+
+        static PLACED_BIT_SHIPS: LazyLock<PlacedBitShips> = LazyLock::new(|| {
+            assert!(
+                SHIPS.is_sorted_by_key(|ship| ship.index()),
+                "SHIPS has to be sorted by ship.index()"
+            );
+            let placed_ships = SHIPS.map(|ship| {
+                let mut placed_ships = [BitBoard::new(Board::new()); 256];
+                for dir in [Direction::Horizontal, Direction::Vertical] {
+                    for y in 0..SIZE {
+                        for x in 0..SIZE {
+                            let cell_index = y * 10 + x;
+                            let bit_board_index =
+                                dir as usize * 128 + Board::map_index_to_bit_index(cell_index);
+                            let mut board = Board::new();
+                            board.const_place_ship(x, y, dir, ship);
+
+                            if bit_board_index < 256 {
+                                placed_ships[bit_board_index] = BitBoard::new(board);
+                            }
+                        }
+                    }
+                }
+                placed_ships
+            });
+            PlacedBitShips { placed_ships }
+        });
+        &PLACED_BIT_SHIPS
+    }
 }
 
 pub struct SpecialRng {
@@ -78,35 +113,18 @@ impl SpecialRng {
 }
 
 pub struct Solver {
-    pub placed_bit_ships: PlacedBitShips,
-    current_board: Board,
+    pub placed_bit_ships: &'static PlacedBitShips,
+    pub current_board: Board,
 }
 
 impl Solver {
     pub fn new() -> Self {
         Solver {
-            placed_bit_ships: Self::gen_placed_bit_boards(),
+            placed_bit_ships: PlacedBitShips::new(),
             current_board: Board::new(),
         }
     }
-    fn gen_placed_bit_boards() -> PlacedBitShips {
-        let mut placed_ships = [[BitBoard::new(Board::new()); 256]; 4];
-        for ship_i in 0..PLACED_SHIPS.len() {
-            for dir in 0..2 {
-                for i in 0..128 {
-                    let bit_board_offset = Board::map_index_to_bit_index(i);
-                    let bit_board_index = dir * 128 + bit_board_offset;
 
-                    let index = dir * 128 + i;
-                    if bit_board_index < 256 {
-                        placed_ships[ship_i][bit_board_index] =
-                            BitBoard::new(PLACED_SHIPS[ship_i][index]);
-                    }
-                }
-            }
-        }
-        PlacedBitShips { placed_ships }
-    }
     pub fn reset(&mut self) {
         self.current_board = Board::new();
     }
@@ -158,7 +176,7 @@ impl Solver {
                         bit_board,
                         ship_amounts,
                         &mut ship_counts,
-                        &self.placed_bit_ships,
+                        self.placed_bit_ships,
                         &mut special_rng,
                     );
                 }
