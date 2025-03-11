@@ -68,8 +68,7 @@ impl Board {
     pub fn to_protected(mut self) -> Self {
         for cell in &mut self.cells {
             *cell = match cell {
-                Cell::Protected => Cell::Protected,
-                Cell::ShipHit | Cell::Ship => Cell::Protected,
+                Cell::ShipHit | Cell::Ship | Cell::Protected => Cell::Protected,
                 Cell::Water => Cell::Water,
             };
         }
@@ -198,7 +197,7 @@ impl Board {
     }
 
     pub fn swab(mut self, a: Cell, b: Cell) -> Self {
-        for cell in self.cells.iter_mut() {
+        for cell in &mut self.cells {
             if *cell == a {
                 *cell = b;
             } else if *cell == b {

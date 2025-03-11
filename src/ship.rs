@@ -21,15 +21,14 @@ impl Ship {
             3 => ShipLength::_3,
             4 => ShipLength::_4,
             5 => unreachable!(), // implement y shift by 5 in allowable_ship_placements. Currently it doesn't work because it would have to get a second amount data from high
-            // 5 => ShipLength::_5,
             _ => unreachable!(),
         };
         Ship { length }
     }
-    pub const fn index(&self) -> usize {
+    pub const fn index(self) -> usize {
         self.length as usize - 1
     }
-    pub const fn length(&self) -> usize {
+    pub const fn length(self) -> usize {
         self.length as usize
     }
 }

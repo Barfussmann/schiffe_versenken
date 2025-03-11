@@ -91,7 +91,7 @@ impl DoubleBitBoard {
         self.boards[0].place_ship::<S>(indecies[0] as usize, placed_bit_ships);
         self.boards[1].place_ship::<S>(indecies[1] as usize, placed_bit_ships);
     }
-    fn allowable<const S: Ship>(&self) -> u64x8 {
+    fn allowable_placements<const S: Ship>(&self) -> u64x8 {
         simd_swizzle!(
             self.boards[0].allowable::<S>(),
             self.boards[1].allowable::<S>(),
@@ -104,13 +104,9 @@ impl DoubleBitBoard {
         placed_bit_ships: &PlacedBitShips,
         special_rng: &mut SpecialRng,
     ) {
-        let ship_placements = self.allowable::<S>();
+        let ship_placements = self.allowable_placements::<S>();
 
-        let possible_placements_counts: u64x8 =
-            unsafe { _mm512_popcnt_epi64(ship_placements.into()) }.into();
-
-        let ship_indecies =
-            double_nth_set_bit_u64x4(ship_placements, possible_placements_counts, special_rng);
+        let ship_indecies = double_nth_set_bit_u64x4(ship_placements, special_rng);
 
         self.place_ship::<S>(ship_indecies, placed_bit_ships);
     }
@@ -264,12 +260,10 @@ fn nth_set_bit_u64x4(
 }
 
 // #[inline(never)]
-fn double_nth_set_bit_u64x4(
-    set_bits: u64x8,
-    set_bits_counted_ones: u64x8,
-    special_rng: &mut SpecialRng,
-) -> [u32; 2] {
-    let small_set_counts_bits: u16x8 = set_bits_counted_ones.cast();
+fn double_nth_set_bit_u64x4(set_bits: u64x8, special_rng: &mut SpecialRng) -> [u32; 2] {
+    let set_bits_counts: u64x8 = unsafe { _mm512_popcnt_epi64(set_bits.into()) }.into();
+
+    let small_set_counts_bits: u16x8 = set_bits_counts.cast();
     let small_set_bits_u64: u64x2 = u64x2::from_ne_bytes(small_set_counts_bits.to_ne_bytes());
 
     let total_sum: u16x8 =

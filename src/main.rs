@@ -98,22 +98,11 @@ pub fn step(
         if ship_amounts[0] > 2 {  for board in &mut boards {  board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);  }  }
         if ship_amounts[0] > 3 {  for board in &mut boards {  board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);  }  }
 
+        // if ship_amounts[3] > 0 {  for board in &mut boards {  board.random_place_ship::<{ Ship::new(4) }>(placed_bit_ships, special_rng);  }  }
+        // if ship_amounts[2] > 0 {  for board in &mut boards {  board.random_place_ship::<{ Ship::new(3) }>(placed_bit_ships, special_rng);  }  }
+        // if ship_amounts[1] > 0 {  for board in &mut boards {  board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng);  }  }
+        // if ship_amounts[0] > 0 {  for board in &mut boards {  board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng);  }  }
 
-        // if ship_amounts[3] > 0 { board.random_place_ship::<{ Ship::new(4) }>(placed_bit_ships, special_rng); }
-        // if ship_amounts[2] > 0 { board.random_place_ship::<{ Ship::new(3) }>(placed_bit_ships, special_rng); }
-        // if ship_amounts[1] > 0 { board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng); }
-        // if ship_amounts[0] > 0 { board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng); }
-
-        // if ship_amounts[3] > 0 { board.random_place_ship::<{ Ship::new(4) }>(placed_bit_ships, special_rng); }
-        // if ship_amounts[2] > 0 { board.random_place_ship::<{ Ship::new(3) }>(placed_bit_ships, special_rng); }
-        // if ship_amounts[2] > 1 { board.random_place_ship::<{ Ship::new(3) }>(placed_bit_ships, special_rng); }
-        // if ship_amounts[1] > 0 { board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng); }
-        // if ship_amounts[1] > 1 { board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng); }
-        // if ship_amounts[1] > 2 { board.random_place_ship::<{ Ship::new(2) }>(placed_bit_ships, special_rng); }
-        // if ship_amounts[0] > 0 { board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng); }
-        // if ship_amounts[0] > 1 { board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng); }
-        // if ship_amounts[0] > 2 { board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng); }
-        // if ship_amounts[0] > 3 { board.random_place_ship::<{ Ship::new(1) }>(placed_bit_ships, special_rng); }
 
         for board in &boards {
             // small_counts.add_octa_bit_board(*board);
