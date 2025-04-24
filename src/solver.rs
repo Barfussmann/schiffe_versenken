@@ -168,7 +168,7 @@ impl Solver {
             .map(|_| {
                 let mut ship_counts = ship_counts::ShipCounts::new();
                 let mut special_rng = SpecialRng::new();
-                let ship_amounts = std::hint::black_box([4, 3, 2, 1]);
+                let ship_amounts = std::hint::black_box([4, 3, 2, 1, 0]);
 
                 let end_time = Instant::now() + time_to_run;
                 while Instant::now() < end_time {

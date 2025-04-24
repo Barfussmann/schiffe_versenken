@@ -66,12 +66,12 @@ impl ShipCounts {
         self.board_count += 1;
     }
     pub fn add_small_counts(&mut self, small_counts: ShipCountsSmall, count: u64) {
-        for i in 0..40 {
+        for i in 0..64 {
             self.counts[i] += small_counts.small_counts[0][i] as u64;
         }
         // high bits
-        for i in 0..60 {
-            self.counts[i + 40] += small_counts.small_counts[1][i] as u64;
+        for i in 0..36 {
+            self.counts[i + 64] += small_counts.small_counts[1][i] as u64;
         }
         assert!(
             count < 256,

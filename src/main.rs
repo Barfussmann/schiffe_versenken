@@ -47,12 +47,11 @@ fn main() {
 #[rustfmt::skip]
 pub fn step(
     bit_board: BitBoard,
-    ship_amounts: [u8; 4],
+    ship_amounts: [u8; 5],
     ship_counts: &mut ship_counts::ShipCounts,
     placed_bit_ships: &PlacedBitShips,
     special_rng: &mut SpecialRng,
 ) {
-    // const LOOP_PARALLELISM: usize = 1;
     // const LOOP_PARALLELISM: usize = 3;
     // const INSTRUCTION_PARALLELISM: usize = OctaBitBoard::INSTRUCTION_PARALLELISM;
     // let octa_bit_board = OctaBitBoard::new(bit_board);

@@ -1,8 +1,8 @@
-use glam::{IVec2, ivec2};
-
 use crate::ship::Ship;
 use crate::{BOARD_SIZE, SIZE};
+use glam::{IVec2, ivec2};
 
+use core::iter::Iterator;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::ops::{Index, Sub};
@@ -81,11 +81,7 @@ impl Board {
         }
     }
     pub const fn map_index_to_bit_index(index: usize) -> usize {
-        if index < 40 {
-            index
-        } else {
-            (index - 40) + 64 // put it into the next u64 to make further calculations easier
-        }
+        index
     }
     pub fn to_protected(mut self) -> Self {
         for cell in &mut self.cells {
@@ -97,30 +93,27 @@ impl Board {
         self
     }
     pub fn shifted_protected<const S: Ship>(&self) -> (u64x2, u64x2) {
-        let shifts_x: Vec<usize> = (0..S.length()).collect();
-        let shifts_y: Vec<usize> = (0..S.length() * SIZE).step_by(SIZE).collect();
+        let x_shifted = self.multishift(0..S.length()).to_u64x2(Cell::Protected);
+        let y_shifted = self
+            .multishift((0..S.length()).map(|i| i * SIZE))
+            .to_u64x2(Cell::Protected);
 
-        let x_ship_mask = {
-            let mut mask = 0u128;
-            let single_row_allowable = (1 << (SIZE - (S.length() - 1))) - 1;
-            for y in 0..SIZE {
-                let bit_index = Self::map_index_to_bit_index(y * SIZE);
-                mask |= single_row_allowable << bit_index;
+        let mut x_mask = Board::new();
+        let mut y_mask = Board::new();
+
+        // The last rows the ship can't fit without going over the boarder.
+        for y in 0..SIZE {
+            for x in 0..SIZE - (S.length() - 1) {
+                x_mask.cells[Board::cell_index(x, y)] = Cell::Protected;
+                y_mask.cells[Board::cell_index(y, x)] = Cell::Protected;
             }
-            unsafe { std::mem::transmute::<u128, u64x2>(mask) }
-        };
-        let y_ship_mask = {
-            let low = (1 << (4 * SIZE)) - 1; // group of the lower 4 rows
-            let high = (1 << ((7 - S.length()) * SIZE)) - 1; // when the ship length is over 1 the top rows are cut off
-            u64x2::from_array([low, high])
-        };
-
+        }
         (
-            !self.multishift(&shifts_x).to_u64x2(Cell::Protected) & x_ship_mask,
-            !self.multishift(&shifts_y).to_u64x2(Cell::Protected) & y_ship_mask,
+            !x_shifted & x_mask.to_u64x2(Cell::Protected),
+            !y_shifted & y_mask.to_u64x2(Cell::Protected),
         )
     }
-    fn multishift(&self, amounts: &[usize]) -> Self {
+    fn multishift(&self, amounts: impl Iterator<Item = usize>) -> Self {
         let mut result = Self::new();
         for shift in amounts {
             for i in 0..SIZE * SIZE {
@@ -134,13 +127,13 @@ impl Board {
         result
     }
 
-    pub fn to_u64x2(self, cell_type: Cell) -> u64x2 {
+    pub fn to_u64x2(self, cell_type_to_one: Cell) -> u64x2 {
         let mut val = 0u128;
 
         for i in 0..u128::BITS as usize {
             let bit_index = Self::map_index_to_bit_index(i);
 
-            if cell_type == self.cells[i] {
+            if cell_type_to_one == self.cells[i] {
                 val |= 1 << bit_index;
             }
         }
