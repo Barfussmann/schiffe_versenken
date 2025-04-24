@@ -52,13 +52,16 @@ pub fn step(
     placed_bit_ships: &PlacedBitShips,
     special_rng: &mut SpecialRng,
 ) {
-    // const LOOP_PARALLELISM: usize = 3;
+    // const LOOP_PARALLELISM: usize = 1;
     // const INSTRUCTION_PARALLELISM: usize = OctaBitBoard::INSTRUCTION_PARALLELISM;
     // let octa_bit_board = OctaBitBoard::new(bit_board);
 
-    const LOOP_PARALLELISM: usize = 5;
+    const LOOP_PARALLELISM: usize = 4;
     const INSTRUCTION_PARALLELISM: usize = DoubleBitBoard::INSTRUCTION_PARALLELISM;
     let double_bit_board = DoubleBitBoard::new(bit_board);
+
+    // const LOOP_PARALLELISM: usize = 1;
+    // const INSTRUCTION_PARALLELISM: usize = BitBoard::INSTRUCTION_PARALLELISM;
 
     const LOOP_ITERATIONS: usize = 255 / LOOP_PARALLELISM / INSTRUCTION_PARALLELISM;
     const ITERATIONS: usize = LOOP_ITERATIONS * LOOP_PARALLELISM * INSTRUCTION_PARALLELISM;
@@ -71,6 +74,7 @@ pub fn step(
         // random_place ship is short enough to fit allow multiple executions in the cpu at once without dependency on the previous random_place_ship
         // let mut boards = [octa_bit_board; LOOP_PARALLELISM];
         let mut boards = [double_bit_board; LOOP_PARALLELISM];
+        // let mut boards = [bit_board; LOOP_PARALLELISM];
 
 
         if ship_amounts[3] > 0 {  for board in &mut boards {  board.random_place_ship::<{ Ship::new(4) }>(placed_bit_ships, special_rng);  }  }

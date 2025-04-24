@@ -1,3 +1,4 @@
+use core::simd::{simd_swizzle, u64x4};
 use std::{
     arch::x86_64::{self},
     hint::black_box,
@@ -8,7 +9,7 @@ use std::{
 use std::{
     arch::x86_64::{_mm256_popcnt_epi64, _mm512_popcnt_epi64},
     mem::transmute,
-    simd::{Mask, Swizzle, cmp::SimdPartialOrd, num::SimdUint, simd_swizzle},
+    simd::{Mask, Swizzle, cmp::SimdPartialOrd, num::SimdUint},
 };
 
 use crate::{
@@ -115,51 +116,54 @@ impl DoubleBitBoard {
 }
 
 #[derive(Clone, Copy)]
+#[repr(align(256))]
 pub struct BitBoard {
-    pub protected_and_ship: u64x16,
+    pub protected_and_ship: [u64x8; 3],
 }
 impl BitBoard {
+    pub const INSTRUCTION_PARALLELISM: usize = 1;
     pub fn allowable<const S: Ship>(&self) -> u64x4 {
         match S.length() {
-            1 => simd_swizzle!(self.protected_and_ship, [2, 3, 2, 3]),
-            2 => simd_swizzle!(self.protected_and_ship, [4, 5, 6, 7]),
-            3 => simd_swizzle!(self.protected_and_ship, [8, 9, 10, 11]),
-            4 => simd_swizzle!(self.protected_and_ship, [12, 13, 14, 15]),
+            1 => simd_swizzle!(self.protected_and_ship[0], [2, 3, 2, 3]),
+            2 => simd_swizzle!(self.protected_and_ship[0], [4, 5, 6, 7]),
+            3 => simd_swizzle!(self.protected_and_ship[1], [0, 1, 2, 3]),
+            4 => simd_swizzle!(self.protected_and_ship[1], [4, 5, 6, 7]),
+            5 => simd_swizzle!(self.protected_and_ship[2], [0, 1, 2, 3]),
+            6 => simd_swizzle!(self.protected_and_ship[2], [4, 5, 6, 7]),
             _ => unreachable!("Invalid ship length"),
         }
     }
     pub fn ship(&self) -> u64x2 {
-        simd_swizzle!(self.protected_and_ship, [0, 1])
+        simd_swizzle!(self.protected_and_ship[0], [0, 1])
     }
 
     pub fn new(board: Board) -> Self {
-        let ship = board.to_u64x2(Cell::Ship);
+        let ship = !board.to_u64x2(Cell::Ship);
 
         let protected = board.to_protected();
 
         // let protected_1 = protected.to_u64x2(Cell::Protected);
 
-        let (protected_1, _) = protected.shifted_protected::<{ Ship::new(1) }>(); // x and y are the same so we only need one
-        let (protected_2_x, protected_2_y) = protected.shifted_protected::<{ Ship::new(2) }>();
-        let (protected_3_x, protected_3_y) = protected.shifted_protected::<{ Ship::new(3) }>();
-        let (protected_4_x, protected_4_y) = protected.shifted_protected::<{ Ship::new(4) }>();
+        let protected_1 = protected.shifted_protected::<{ Ship::new(1) }>(); // x and y are the same so we only need one
+        let protected_2 = protected.shifted_protected::<{ Ship::new(2) }>();
+        let protected_3 = protected.shifted_protected::<{ Ship::new(3) }>();
+        let protected_4 = protected.shifted_protected::<{ Ship::new(4) }>();
+        let protected_5 = protected.shifted_protected::<{ Ship::new(5) }>();
+        let protected_6 = protected.shifted_protected::<{ Ship::new(6) }>();
 
         Self {
-            protected_and_ship: u64x16::from_slice(
-                [
-                    (!ship).to_array(),
-                    protected_1.to_array(),
-                    protected_2_x.to_array(),
-                    protected_2_y.to_array(),
-                    protected_3_x.to_array(),
-                    protected_3_y.to_array(),
-                    protected_4_x.to_array(),
-                    protected_4_y.to_array(),
-                ]
-                .as_flattened(),
-            ),
+            protected_and_ship: [
+                simd_swizzle!(
+                    u64x4::from_array([ship[0], ship[1], protected_1[0], protected_1[1]]),
+                    protected_2,
+                    [0, 1, 2, 3, 4, 5, 6, 7]
+                ),
+                simd_swizzle!(protected_3, protected_4, [0, 1, 2, 3, 4, 5, 6, 7]),
+                simd_swizzle!(protected_5, protected_6, [0, 1, 2, 3, 4, 5, 6, 7]),
+            ],
         }
     }
+    // #[inline(never)]
     fn place_ship<const S: Ship>(&mut self, index: usize, placed_bit_ships: &PlacedBitShips) {
         let placed_ship_board = unsafe {
             placed_bit_ships
@@ -167,21 +171,9 @@ impl BitBoard {
                 .get_unchecked(S.index())
                 .get_unchecked(index)
         };
-
-        if S.length() <= 2 {
-            // don't need the top 512 bits so we don't update them
-
-            let mask = simd_swizzle!(
-                placed_ship_board.protected_and_ship,
-                [0, 1, 2, 3, 4, 5, 6, 7,]
-            );
-            let protected_and_ship =
-                simd_swizzle!(self.protected_and_ship, [0, 1, 2, 3, 4, 5, 6, 7,]);
-
-            self.protected_and_ship.as_mut_array()[0..8]
-                .copy_from_slice((protected_and_ship & mask).as_array());
-        } else {
-            self.protected_and_ship &= placed_ship_board.protected_and_ship;
+        // we only need the ships that are shorter than the current ship
+        for i in 0..S.length().div_ceil(2) {
+            self.protected_and_ship[i] &= placed_ship_board.protected_and_ship[i];
         }
     }
 
@@ -362,54 +354,48 @@ fn octa_nth_set_bit_u64x4(
         unsafe { x86_64::_mm512_permutexvar_epi16(u64_index.into(), running_sum_adjusted.into()) }
             .into();
 
-    let low_set_bit = simd_swizzle!(set_bit_front[0], set_bit_front[1], [0, 1, 10, 11]);
-    let high_set_bit = simd_swizzle!(set_bit_front[2], set_bit_front[3], [4, 5, 14, 15]);
-    let set_bits = simd_swizzle!(low_set_bit, high_set_bit, [0, 1, 2, 3, 4, 5, 6, 7]);
-
-    nth_set_bit_u64x8(set_bits, all_bit_index - adjusted_running_sum_front)
-        + local_u64_index * u64x8::splat(64)
-    // u64x8::from_array([
-    //     local_u64_index[0] as u64 * 64
-    //         + nth_set_bit_u64(
-    //             set_bit_front[0][0],
-    //             (all_bit_index[0] - adjusted_running_sum_front[0]) as u32,
-    //         ) as u64,
-    //     local_u64_index[1] as u64 * 64
-    //         + nth_set_bit_u64(
-    //             set_bit_front[0][1],
-    //             (all_bit_index[4] - adjusted_running_sum_front[4]) as u32,
-    //         ) as u64,
-    //     local_u64_index[2] as u64 * 64
-    //         + nth_set_bit_u64(
-    //             set_bit_front[1][2],
-    //             (all_bit_index[8] - adjusted_running_sum_front[8]) as u32,
-    //         ) as u64,
-    //     local_u64_index[3] as u64 * 64
-    //         + nth_set_bit_u64(
-    //             set_bit_front[1][3],
-    //             (all_bit_index[12] - adjusted_running_sum_front[12]) as u32,
-    //         ) as u64,
-    //     local_u64_index[4] as u64 * 64
-    //         + nth_set_bit_u64(
-    //             set_bit_front[2][4],
-    //             (all_bit_index[16] - adjusted_running_sum_front[16]) as u32,
-    //         ) as u64,
-    //     local_u64_index[5] as u64 * 64
-    //         + nth_set_bit_u64(
-    //             set_bit_front[2][5],
-    //             (all_bit_index[20] - adjusted_running_sum_front[20]) as u32,
-    //         ) as u64,
-    //     local_u64_index[6] as u64 * 64
-    //         + nth_set_bit_u64(
-    //             set_bit_front[3][6],
-    //             (all_bit_index[24] - adjusted_running_sum_front[24]) as u32,
-    //         ) as u64,
-    //     local_u64_index[7] as u64 * 64
-    //         + nth_set_bit_u64(
-    //             set_bit_front[3][7],
-    //             (all_bit_index[28] - adjusted_running_sum_front[28]) as u32,
-    //         ) as u64,
-    // ])
+    u64x8::from_array([
+        local_u64_index[0] as u64 * 64
+            + nth_set_bit_u64(
+                set_bit_front[0][0],
+                (all_bit_index[0] - adjusted_running_sum_front[0]) as u32,
+            ) as u64,
+        local_u64_index[1] as u64 * 64
+            + nth_set_bit_u64(
+                set_bit_front[0][1],
+                (all_bit_index[4] - adjusted_running_sum_front[4]) as u32,
+            ) as u64,
+        local_u64_index[2] as u64 * 64
+            + nth_set_bit_u64(
+                set_bit_front[1][2],
+                (all_bit_index[8] - adjusted_running_sum_front[8]) as u32,
+            ) as u64,
+        local_u64_index[3] as u64 * 64
+            + nth_set_bit_u64(
+                set_bit_front[1][3],
+                (all_bit_index[12] - adjusted_running_sum_front[12]) as u32,
+            ) as u64,
+        local_u64_index[4] as u64 * 64
+            + nth_set_bit_u64(
+                set_bit_front[2][4],
+                (all_bit_index[16] - adjusted_running_sum_front[16]) as u32,
+            ) as u64,
+        local_u64_index[5] as u64 * 64
+            + nth_set_bit_u64(
+                set_bit_front[2][5],
+                (all_bit_index[20] - adjusted_running_sum_front[20]) as u32,
+            ) as u64,
+        local_u64_index[6] as u64 * 64
+            + nth_set_bit_u64(
+                set_bit_front[3][6],
+                (all_bit_index[24] - adjusted_running_sum_front[24]) as u32,
+            ) as u64,
+        local_u64_index[7] as u64 * 64
+            + nth_set_bit_u64(
+                set_bit_front[3][7],
+                (all_bit_index[28] - adjusted_running_sum_front[28]) as u32,
+            ) as u64,
+    ])
 }
 
 fn nth_set_bit_u64x8(set_bits: u64x8, indecies: u16x32) -> u64x8 {

@@ -33,15 +33,11 @@ impl PlacedBitShips {
                 for dir in [Direction::Horizontal, Direction::Vertical] {
                     for y in 0..SIZE {
                         for x in 0..SIZE {
-                            let cell_index = y * 10 + x;
-                            let bit_board_index =
-                                dir as usize * 128 + Board::map_index_to_bit_index(cell_index);
+                            let bit_board_index = dir as usize * 128 + (y * 10 + x);
                             let mut board = Board::new();
                             board.const_place_ship(x, y, dir, ship);
 
-                            if bit_board_index < 256 {
-                                placed_ships[bit_board_index] = BitBoard::new(board);
-                            }
+                            placed_ships[bit_board_index] = BitBoard::new(board);
                         }
                     }
                 }

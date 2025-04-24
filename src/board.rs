@@ -3,6 +3,7 @@ use crate::{BOARD_SIZE, SIZE};
 use glam::{IVec2, ivec2};
 
 use core::iter::Iterator;
+use core::simd::u64x4;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::ops::{Index, Sub};
@@ -80,9 +81,7 @@ impl Board {
             cells: [Cell::Water; BOARD_SIZE],
         }
     }
-    pub const fn map_index_to_bit_index(index: usize) -> usize {
-        index
-    }
+
     pub fn to_protected(mut self) -> Self {
         for cell in &mut self.cells {
             *cell = match cell {
@@ -92,7 +91,7 @@ impl Board {
         }
         self
     }
-    pub fn shifted_protected<const S: Ship>(&self) -> (u64x2, u64x2) {
+    pub fn shifted_protected<const S: Ship>(&self) -> u64x4 {
         let x_shifted = self.multishift(0..S.length()).to_u64x2(Cell::Protected);
         let y_shifted = self
             .multishift((0..S.length()).map(|i| i * SIZE))
@@ -108,10 +107,10 @@ impl Board {
                 y_mask.cells[Board::cell_index(y, x)] = Cell::Protected;
             }
         }
-        (
-            !x_shifted & x_mask.to_u64x2(Cell::Protected),
-            !y_shifted & y_mask.to_u64x2(Cell::Protected),
-        )
+        let x = !x_shifted & x_mask.to_u64x2(Cell::Protected);
+        let y = !y_shifted & y_mask.to_u64x2(Cell::Protected);
+
+        u64x4::from_slice([x.to_array(), y.to_array()].as_flattened())
     }
     fn multishift(&self, amounts: impl Iterator<Item = usize>) -> Self {
         let mut result = Self::new();
@@ -131,7 +130,7 @@ impl Board {
         let mut val = 0u128;
 
         for i in 0..u128::BITS as usize {
-            let bit_index = Self::map_index_to_bit_index(i);
+            let bit_index = i;
 
             if cell_type_to_one == self.cells[i] {
                 val |= 1 << bit_index;

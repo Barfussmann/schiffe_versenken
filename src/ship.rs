@@ -6,6 +6,7 @@ pub enum ShipLength {
     _3 = 3,
     _4 = 4,
     _5 = 5,
+    _6 = 6,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ConstParamTy)]
@@ -20,7 +21,8 @@ impl Ship {
             2 => ShipLength::_2,
             3 => ShipLength::_3,
             4 => ShipLength::_4,
-            5 => unreachable!(), // implement y shift by 5 in allowable_ship_placements. Currently it doesn't work because it would have to get a second amount data from high
+            5 => ShipLength::_5,
+            6 => ShipLength::_6,
             _ => unreachable!(),
         };
         Ship { length }
