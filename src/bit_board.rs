@@ -13,6 +13,7 @@ use std::{
 };
 
 use crate::{
+    BitIter,
     board::Board,
     solver::{PlacedBitShips, SpecialRng},
 };
@@ -30,7 +31,7 @@ impl OctaBitBoard {
     }
     fn place_ship<const S: Ship>(&mut self, indecies: u64x8, placed_bit_ships: &PlacedBitShips) {
         for (board, index) in zip(&mut self.boards, indecies.as_array()) {
-            board.place_ship::<S>(*index as usize, placed_bit_ships);
+            board.place_ship::<S>(*index as u8, placed_bit_ships);
         }
     }
     fn allowable<const S: Ship>(&self) -> [u64x8; 4] {
@@ -91,8 +92,8 @@ impl DoubleBitBoard {
         Self { boards: [board; 2] }
     }
     fn place_ship<const S: Ship>(&mut self, indecies: [u32; 2], placed_bit_ships: &PlacedBitShips) {
-        self.boards[0].place_ship::<S>(indecies[0] as usize, placed_bit_ships);
-        self.boards[1].place_ship::<S>(indecies[1] as usize, placed_bit_ships);
+        self.boards[0].place_ship::<S>(indecies[0] as u8, placed_bit_ships);
+        self.boards[1].place_ship::<S>(indecies[1] as u8, placed_bit_ships);
     }
     fn allowable_placements<const S: Ship>(&self) -> u64x8 {
         simd_swizzle!(
@@ -133,8 +134,19 @@ impl BitBoard {
             _ => unreachable!("Invalid ship length"),
         }
     }
+    pub fn allowable_dyn(&self, ship: Ship) -> u64x4 {
+        match ship.length() {
+            1 => simd_swizzle!(self.protected_and_ship[0], [2, 3, 2, 3]),
+            2 => simd_swizzle!(self.protected_and_ship[0], [4, 5, 6, 7]),
+            3 => simd_swizzle!(self.protected_and_ship[1], [0, 1, 2, 3]),
+            4 => simd_swizzle!(self.protected_and_ship[1], [4, 5, 6, 7]),
+            5 => simd_swizzle!(self.protected_and_ship[2], [0, 1, 2, 3]),
+            6 => simd_swizzle!(self.protected_and_ship[2], [4, 5, 6, 7]),
+            _ => unreachable!("Invalid ship length"),
+        }
+    }
     pub fn ship(&self) -> u64x2 {
-        simd_swizzle!(self.protected_and_ship[0], [0, 1])
+        !simd_swizzle!(self.protected_and_ship[0], [0, 1])
     }
 
     pub fn new(board: Board) -> Self {
@@ -164,12 +176,35 @@ impl BitBoard {
         }
     }
     // #[inline(never)]
-    fn place_ship<const S: Ship>(&mut self, index: usize, placed_bit_ships: &PlacedBitShips) {
+    pub fn place_ship_dyn(&mut self, ship: Ship, index: usize, placed_bit_ships: &PlacedBitShips) {
+        let placed_ship_board = unsafe {
+            placed_bit_ships
+                .placed_ships
+                .get_unchecked(ship.index())
+                .get_unchecked(index)
+        };
+        // we only need the ships that are shorter than the current ship
+        for i in 0..ship.length().div_ceil(2) {
+            unsafe {
+                *self.protected_and_ship.get_unchecked_mut(i) &=
+                    *placed_ship_board.protected_and_ship.get_unchecked(i);
+            }
+            // self.protected_and_ship[i] &= placed_ship_board.protected_and_ship[i];
+        }
+        // for i in 0..3 {
+        //     unsafe {
+        //         *self.protected_and_ship.get_unchecked_mut(i) &=
+        //             *placed_ship_board.protected_and_ship.get_unchecked(i);
+        //     }
+        //     // self.protected_and_ship[i] &= placed_ship_board.protected_and_ship[i];
+        // }
+    }
+    pub fn place_ship<const S: Ship>(&mut self, index: u8, placed_bit_ships: &PlacedBitShips) {
         let placed_ship_board = unsafe {
             placed_bit_ships
                 .placed_ships
                 .get_unchecked(S.index())
-                .get_unchecked(index)
+                .get_unchecked(index as usize)
         };
         // we only need the ships that are shorter than the current ship
         for i in 0..S.length().div_ceil(2) {
@@ -194,13 +229,26 @@ impl BitBoard {
 
             let index =
                 nth_set_bit_u64x2(simd_swizzle!(ship_placements, [0, 1]), total_index) as usize;
-            self.place_ship::<S>(index, placed_bit_ships);
+            self.place_ship::<S>(index as u8, placed_bit_ships);
             return;
         }
 
         let ship_index = nth_set_bit_u64x4(ship_placements, possible_placements_count, special_rng);
 
-        self.place_ship::<S>(ship_index as usize, placed_bit_ships);
+        self.place_ship::<S>(ship_index as u8, placed_bit_ships);
+    }
+    pub fn placed_ships_to_board(&self) -> Board {
+        let mut board = Board::new();
+
+        println!("{:x}", self.ship()[0]);
+
+        for set_ship in BitIter::new(simd_swizzle!(self.ship(), [0, 1, 0, 1])) {
+            if set_ship >= 128 {
+                break;
+            }
+            board.cells[set_ship as usize] = Cell::Ship;
+        }
+        board
     }
 }
 

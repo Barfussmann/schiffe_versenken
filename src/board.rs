@@ -85,6 +85,8 @@ impl Board {
     pub fn to_protected(mut self) -> Self {
         for cell in &mut self.cells {
             *cell = match cell {
+                // Cell::Ship => Cell::Protected,
+                // _ => Cell::Water,
                 Cell::ShipHit | Cell::Ship | Cell::Protected => Cell::Protected,
                 Cell::Water => Cell::Water,
             };

@@ -10,18 +10,25 @@ use crate::{
     bit_board::BitBoard,
     board::{Board, Cell, Direction},
     ship::Ship,
-    ship_counts, step,
+    ship_counts, step_iter,
 };
 use num_format::{Locale, ToFormattedString};
 use rand::random;
 use rayon::prelude::*;
 
 pub struct PlacedBitShips {
-    pub placed_ships: [[BitBoard; 256]; 4],
+    pub placed_ships: [[BitBoard; 256]; 6],
 }
 impl PlacedBitShips {
     pub fn new() -> &'static Self {
-        const SHIPS: [Ship; 4] = [Ship::new(1), Ship::new(2), Ship::new(3), Ship::new(4)];
+        const SHIPS: [Ship; 6] = [
+            Ship::new(1),
+            Ship::new(2),
+            Ship::new(3),
+            Ship::new(4),
+            Ship::new(5),
+            Ship::new(6),
+        ];
 
         static PLACED_BIT_SHIPS: LazyLock<PlacedBitShips> = LazyLock::new(|| {
             assert!(
@@ -124,9 +131,9 @@ impl Solver {
     pub fn reset(&mut self) {
         self.current_board = Board::new();
     }
-    pub fn run(&self, time_to_run: Duration) {
+    pub fn run(&self, time_to_run: Duration, ship_amounts: [u8; 6]) {
         let start_time = Instant::now();
-        let ship_counts = self.inner_loop(time_to_run);
+        let ship_counts = self.inner_loop(time_to_run, ship_amounts);
 
         let max_index = zip(
             ship_counts.counts.iter().enumerate(),
@@ -155,7 +162,11 @@ impl Solver {
 
         println!("Max (x, y): ({}, {})", (x as u8 + b'A') as char, y + 1);
     }
-    pub fn inner_loop(&self, time_to_run: Duration) -> ship_counts::ShipCounts {
+    pub fn inner_loop(
+        &self,
+        time_to_run: Duration,
+        ship_amounts: [u8; 6],
+    ) -> ship_counts::ShipCounts {
         // pub fn inner_loop(&mut self, random_values: &[[u32; SHIPS.len()]]) -> ship_counts::ShipCounts {
         let bit_board = BitBoard::new(self.current_board);
 
@@ -164,18 +175,18 @@ impl Solver {
             .map(|_| {
                 let mut ship_counts = ship_counts::ShipCounts::new();
                 let mut special_rng = SpecialRng::new();
-                let ship_amounts = std::hint::black_box([4, 3, 2, 1, 0]);
 
                 let end_time = Instant::now() + time_to_run;
-                while Instant::now() < end_time {
-                    step(
-                        bit_board,
-                        ship_amounts,
-                        &mut ship_counts,
-                        self.placed_bit_ships,
-                        &mut special_rng,
-                    );
-                }
+                // while Instant::now() < end_time {
+                step_iter(bit_board, &mut ship_counts, self.placed_bit_ships);
+                // step(
+                //     bit_board,
+                //     ship_amounts,
+                //     &mut ship_counts,
+                //     self.placed_bit_ships,
+                //     &mut special_rng,
+                // );
+                // }
                 ship_counts
             })
             .reduce(ship_counts::ShipCounts::new, |mut a, b| {
