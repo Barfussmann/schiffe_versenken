@@ -12,10 +12,11 @@ pub enum ShipLength {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ConstParamTy)]
 pub struct Ship {
     pub length: ShipLength,
+    pub index: usize,
 }
 
 impl Ship {
-    pub const fn new(length: usize) -> Ship {
+    pub const fn new(length: usize, index: usize) -> Ship {
         let length = match length {
             1 => ShipLength::_1,
             2 => ShipLength::_2,
@@ -25,10 +26,10 @@ impl Ship {
             6 => ShipLength::_6,
             _ => unreachable!(),
         };
-        Ship { length }
+        Ship { length, index }
     }
     pub const fn index(self) -> usize {
-        self.length as usize - 1
+        self.index
     }
     pub const fn length(self) -> usize {
         self.length as usize

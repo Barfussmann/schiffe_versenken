@@ -1,5 +1,5 @@
 use crate::{
-    bit_board::{BitBoard, DoubleBitBoard, OctaBitBoard},
+    bit_board::BitBoard,
     board::{Board, Cell},
     ship::Ship,
 };
@@ -20,12 +20,14 @@ use std::{
 pub struct ShipPositionCounts {
     counts: [u64x64; 4],
     added_boards: u64,
+    pub small_counts: SmallShipPositionCounts,
 }
 impl ShipPositionCounts {
     pub fn new() -> ShipPositionCounts {
         ShipPositionCounts {
             counts: [u64x64::splat(0); 4],
             added_boards: 0,
+            small_counts: SmallShipPositionCounts::new(),
         }
     }
     fn counts(&self) -> [u64; 256] {
@@ -40,20 +42,20 @@ impl ShipPositionCounts {
         let rem_index = index as usize % 64;
         self.counts[u64_index][rem_index] += counts;
     }
-    pub fn add_small(&mut self, small_counts: &mut ShipPositionCountsSmall) {
+    pub fn add_small(&mut self) {
         for i in 0..4 {
-            self.counts[i] += small_counts.small_counts[i].cast();
+            self.counts[i] += self.small_counts.small_counts[i].cast();
         }
-        *small_counts = ShipPositionCountsSmall::new();
+        self.small_counts = SmallShipPositionCounts::new();
     }
 }
 #[derive(Debug, Clone)]
-pub struct ShipPositionCountsSmall {
+pub struct SmallShipPositionCounts {
     small_counts: [u8x64; 4],
 }
-impl ShipPositionCountsSmall {
-    pub fn new() -> ShipPositionCountsSmall {
-        ShipPositionCountsSmall {
+impl SmallShipPositionCounts {
+    pub fn new() -> SmallShipPositionCounts {
+        SmallShipPositionCounts {
             small_counts: [u8x64::splat(0); 4],
         }
     }
@@ -83,15 +85,6 @@ impl ShipCountsSmall {
             added_ships: 0,
         }
     }
-    pub fn add_octa_bit_board(&mut self, board: OctaBitBoard) {
-        for bit_board in board.boards {
-            self.add_bit_board(bit_board);
-        }
-    }
-    pub fn add_double_bit_board(&mut self, board: DoubleBitBoard) {
-        self.add_bit_board(board.boards[0]);
-        self.add_bit_board(board.boards[1]);
-    }
     // #[inline(never)]
     pub fn add_bit_board(&mut self, board: BitBoard) {
         self.added_ships += 1;
@@ -105,6 +98,7 @@ impl ShipCountsSmall {
 pub struct ShipCounts {
     pub counts: [u64; BOARD_SIZE],
     pub board_count: u64,
+    small_counts: SmallShipPositionCounts,
 }
 
 impl ShipCounts {
@@ -112,6 +106,7 @@ impl ShipCounts {
         ShipCounts {
             counts: [0; BOARD_SIZE],
             board_count: 0,
+            small_counts: SmallShipPositionCounts::new(),
         }
     }
     pub fn add_board(&mut self, board: Board) {

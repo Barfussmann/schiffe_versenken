@@ -13,109 +13,10 @@ use std::{
 };
 
 use crate::{
-    BitIter,
     board::Board,
-    solver::{PlacedBitShips, SpecialRng},
+    solver::{BitIter, PlacedBitShips, SpecialRng},
 };
 use crate::{board::Cell, ship::Ship};
-
-#[derive(Clone, Copy)]
-pub struct OctaBitBoard {
-    pub boards: [BitBoard; 8],
-}
-impl OctaBitBoard {
-    pub const INSTRUCTION_PARALLELISM: usize = 8;
-
-    pub fn new(board: BitBoard) -> Self {
-        Self { boards: [board; 8] }
-    }
-    fn place_ship<const S: Ship>(&mut self, indecies: u64x8, placed_bit_ships: &PlacedBitShips) {
-        for (board, index) in zip(&mut self.boards, indecies.as_array()) {
-            board.place_ship::<S>(*index as u8, placed_bit_ships);
-        }
-    }
-    fn allowable<const S: Ship>(&self) -> [u64x8; 4] {
-        [
-            simd_swizzle!(
-                self.boards[0].allowable::<S>(),
-                self.boards[1].allowable::<S>(),
-                [0, 1, 2, 3, 4, 5, 6, 7]
-            ),
-            simd_swizzle!(
-                self.boards[2].allowable::<S>(),
-                self.boards[3].allowable::<S>(),
-                [0, 1, 2, 3, 4, 5, 6, 7]
-            ),
-            simd_swizzle!(
-                self.boards[4].allowable::<S>(),
-                self.boards[5].allowable::<S>(),
-                [0, 1, 2, 3, 4, 5, 6, 7]
-            ),
-            simd_swizzle!(
-                self.boards[6].allowable::<S>(),
-                self.boards[7].allowable::<S>(),
-                [0, 1, 2, 3, 4, 5, 6, 7]
-            ),
-        ]
-    }
-    // #[inline(never)]
-    pub fn random_place_ship<const S: Ship>(
-        &mut self,
-        placed_bit_ships: &PlacedBitShips,
-        special_rng: &mut SpecialRng,
-    ) {
-        let ship_placements = self.allowable::<S>();
-
-        let possible_placements_counts: [u16x8; 4] = unsafe {
-            [
-                i64x8::from(_mm512_popcnt_epi64(ship_placements[0].into())).cast(),
-                i64x8::from(_mm512_popcnt_epi64(ship_placements[1].into())).cast(),
-                i64x8::from(_mm512_popcnt_epi64(ship_placements[2].into())).cast(),
-                i64x8::from(_mm512_popcnt_epi64(ship_placements[3].into())).cast(),
-            ]
-        };
-        let possible_placements_counts: u16x32 = unsafe { transmute(possible_placements_counts) };
-
-        let ship_indecies =
-            octa_nth_set_bit_u64x4(ship_placements, possible_placements_counts, special_rng);
-
-        self.place_ship::<S>(ship_indecies, placed_bit_ships);
-    }
-}
-#[derive(Clone, Copy)]
-pub struct DoubleBitBoard {
-    pub boards: [BitBoard; 2],
-}
-impl DoubleBitBoard {
-    pub const INSTRUCTION_PARALLELISM: usize = 2;
-    pub fn new(board: BitBoard) -> Self {
-        Self { boards: [board; 2] }
-    }
-    fn place_ship<const S: Ship>(&mut self, indecies: [u32; 2], placed_bit_ships: &PlacedBitShips) {
-        self.boards[0].place_ship::<S>(indecies[0] as u8, placed_bit_ships);
-        self.boards[1].place_ship::<S>(indecies[1] as u8, placed_bit_ships);
-    }
-    fn allowable_placements<const S: Ship>(&self) -> u64x8 {
-        simd_swizzle!(
-            self.boards[0].allowable::<S>(),
-            self.boards[1].allowable::<S>(),
-            [0, 1, 2, 3, 4, 5, 6, 7]
-        )
-    }
-    // #[inline(never)]
-    pub fn random_place_ship<const S: Ship>(
-        &mut self,
-        placed_bit_ships: &PlacedBitShips,
-        special_rng: &mut SpecialRng,
-    ) {
-        let ship_placements = self.allowable_placements::<S>();
-
-        let ship_indecies = double_nth_set_bit_u64x4(ship_placements, special_rng);
-
-        self.place_ship::<S>(ship_indecies, placed_bit_ships);
-    }
-}
-
 #[derive(Clone, Copy)]
 #[repr(align(256))]
 pub struct BitBoard {
@@ -156,12 +57,12 @@ impl BitBoard {
 
         // let protected_1 = protected.to_u64x2(Cell::Protected);
 
-        let protected_1 = protected.shifted_protected::<{ Ship::new(1) }>(); // x and y are the same so we only need one
-        let protected_2 = protected.shifted_protected::<{ Ship::new(2) }>();
-        let protected_3 = protected.shifted_protected::<{ Ship::new(3) }>();
-        let protected_4 = protected.shifted_protected::<{ Ship::new(4) }>();
-        let protected_5 = protected.shifted_protected::<{ Ship::new(5) }>();
-        let protected_6 = protected.shifted_protected::<{ Ship::new(6) }>();
+        let protected_1 = protected.shifted_protected::<{ Ship::new(1, 0) }>(); // x and y are the same so we only need one
+        let protected_2 = protected.shifted_protected::<{ Ship::new(2, 0) }>();
+        let protected_3 = protected.shifted_protected::<{ Ship::new(3, 0) }>();
+        let protected_4 = protected.shifted_protected::<{ Ship::new(4, 0) }>();
+        let protected_5 = protected.shifted_protected::<{ Ship::new(5, 0) }>();
+        let protected_6 = protected.shifted_protected::<{ Ship::new(6, 0) }>();
 
         Self {
             protected_and_ship: [
