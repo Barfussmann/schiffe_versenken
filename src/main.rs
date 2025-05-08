@@ -14,16 +14,17 @@ use std::time::Duration;
 #[allow(unused)]
 use bit_board::BitBoard;
 // use board::Board;
+use board_counts::{BoardShipPositionCounts, ShipCountsSmall, ShipPositionCounts};
 use ship::Ship;
-use ship_counts::{ShipCountsSmall, ShipPositionCounts, SmallShipPositionCounts};
 use solver::{PlacedBitShips, Solver, SpecialRng};
 
 const SIZE: usize = 10;
 const BOARD_SIZE: usize = (SIZE * SIZE).next_multiple_of(64);
 
 mod bit_board;
+mod bit_iter;
+mod board_counts;
 mod ship;
-mod ship_counts;
 mod solver;
 
 fn main() {
@@ -33,9 +34,9 @@ fn main() {
         .unwrap();
 
     let mut solver = Solver::new();
-    let ship_amounts = std::hint::black_box([0, 0, 0, 0, 1, 0]);
-    // let ship_amounts = std::hint::black_box([0, 1, 2, 1, 1, 0]);
-    // let ship_amounts = std::hint::black_box([4, 3, 2, 1, 0, 0]); // russian fleet
+    // let ship_amounts = std::hint::black_box([0, 0, 0, 0, 1]);
+    let ship_amounts = std::hint::black_box([0, 1, 2, 1, 1]);
+    // let ship_amounts = std::hint::black_box([4, 3, 2, 1, 0]); // russian fleet
 
     let time_to_run = Duration::from_millis(1000);
     loop {

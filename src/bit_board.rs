@@ -13,8 +13,9 @@ use std::{
 };
 
 use crate::{
+    bit_iter::BitIter,
     board::Board,
-    solver::{BitIter, PlacedBitShips, SpecialRng},
+    solver::{PlacedBitShips, SpecialRng},
 };
 use crate::{board::Cell, ship::Ship};
 #[derive(Clone, Copy)]

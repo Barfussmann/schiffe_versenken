@@ -8,9 +8,10 @@ use std::{
 use crate::{
     SIZE,
     bit_board::BitBoard,
+    bit_iter::BitIter,
     board::{Board, Cell, Direction},
+    board_counts::{self, BoardCounts, BoardShipPositionCounts, ShipPositionCounts},
     ship::Ship,
-    ship_counts::{self, ShipCounts, ShipPositionCounts, SmallShipPositionCounts},
 };
 use num_format::{Locale, ToFormattedString};
 use rand::random;
@@ -131,7 +132,7 @@ impl Solver {
     pub fn reset(&mut self) {
         self.current_board = Board::new();
     }
-    pub fn run(&self, time_to_run: Duration, ship_amounts: [u8; 6]) {
+    pub fn run(&self, time_to_run: Duration, ship_amounts: [u8; 5]) {
         let start_time = Instant::now();
         let ship_counts = self.inner_loop(time_to_run, ship_amounts);
 
@@ -162,39 +163,33 @@ impl Solver {
 
         println!("Max (x, y): ({}, {})", (x as u8 + b'A') as char, y + 1);
     }
-    pub fn inner_loop(
-        &self,
-        time_to_run: Duration,
-        ship_amounts: [u8; 6],
-    ) -> ship_counts::ShipCounts {
-        // pub fn inner_loop(&mut self, random_values: &[[u32; SHIPS.len()]]) -> ship_counts::ShipCounts {
+    pub fn inner_loop(&self, time_to_run: Duration, ship_counts: [u8; 5]) -> BoardCounts {
         let bit_board = BitBoard::new(self.current_board);
 
         let start_time = Instant::now();
         (0..rayon::current_num_threads())
             .par_bridge()
             .map(|_| {
-                let mut ship_counts = ship_counts::ShipCounts::new();
+                let mut board_counts = BoardCounts::new();
                 let mut special_rng = SpecialRng::new();
 
                 let end_time = start_time + time_to_run;
                 while Instant::now() < end_time {
-                    step_summing::<{ Ship::new(5, 4) }>(
+                    step(
                         bit_board,
-                        &mut ship_counts,
+                        ship_counts,
+                        &mut board_counts,
                         self.placed_bit_ships,
                     );
-                    // step(
+                    // step_summing::<{ Ship::new(5, 4) }>(
                     //     bit_board,
-                    //     ship_amounts,
-                    //     &mut ship_counts,
+                    //     &mut board_counts,
                     //     self.placed_bit_ships,
-                    //     &mut special_rng,
                     // );
                 }
-                ship_counts
+                board_counts
             })
-            .reduce(ship_counts::ShipCounts::new, |mut a, b| {
+            .reduce(BoardCounts::new, |mut a, b| {
                 a.add_other_count(b);
                 a
             })
@@ -203,31 +198,40 @@ impl Solver {
 
 const SHIP_COUNT: usize = 5;
 #[rustfmt::skip]
+#[inline(always)]
 fn step_inner<
     const SHIP: Ship,
     const NEXT_SHIP_INDEX: [usize; SHIP_COUNT],
+    const PLACED_SHIPS: usize,
+    const SHIP_COUNTS: [usize; 5],
 >(
     board: BitBoard,
+    ship: Ship,
     counts: &mut [ShipPositionCounts; 5],
     placed_bit_ships: &PlacedBitShips,
 ) -> u64 {
     // directly add the the positions of all possible placements of the last ship
-    if const { remaining_ships(SHIP.index(), NEXT_SHIP_INDEX) } == 0 {
-        return counts[SHIP.index].small_counts.add_possible_ship_positions(board.allowable::<SHIP>())
-        // return 1
+    if remaining_ships(ship.index(), NEXT_SHIP_INDEX) == 0 {
+    // if const { remaining_ships(SHIP.index(), NEXT_SHIP_INDEX) } == 0 {
+        // return counts[SHIP.index].small_counts.add_possible_ship_positions(board.allowable::<SHIP>())
+        return counts[ship.index].small_counts.add_possible_ship_positions(board.allowable_dyn(ship))
     }
 
     let mut configurations = 0;
-    for ship_pos in BitIter::new(board.allowable::<SHIP>()) {
+    for ship_pos in BitIter::new(board.allowable_dyn(ship)) {
+    // for ship_pos in BitIter::new(board.allowable::<SHIP>()) {
         let mut board = board;
-        board.place_ship::<SHIP>(ship_pos, placed_bit_ships);
+        board.place_ship_dyn(ship, ship_pos as usize, placed_bit_ships);
+        // board.place_ship::<SHIP>(ship_pos, placed_bit_ships);
+
+        // ToDo get the ship to use from the placed ships + Ship_counts
 
         let additional_configurations = match NEXT_SHIP_INDEX[SHIP.index] {
-            0 => step_inner::<{ Ship::new(2, 0) }, NEXT_SHIP_INDEX>(board, counts, placed_bit_ships),
-            1 => step_inner::<{ Ship::new(3, 1) }, NEXT_SHIP_INDEX>(board, counts, placed_bit_ships),
-            2 => step_inner::<{ Ship::new(3, 2) }, NEXT_SHIP_INDEX>(board, counts, placed_bit_ships),
-            3 => step_inner::<{ Ship::new(4, 3) }, NEXT_SHIP_INDEX>(board, counts, placed_bit_ships),
-            4 => step_inner::<{ Ship::new(5, 4) }, NEXT_SHIP_INDEX>(board, counts, placed_bit_ships),
+            0 => step_inner::<{ Ship::new(2, 0) }, NEXT_SHIP_INDEX, PLACED_SHIPS , SHIP_COUNTS>(board,Ship::new(2, 0),  counts, placed_bit_ships),
+            1 => step_inner::<{ Ship::new(3, 1) }, NEXT_SHIP_INDEX, PLACED_SHIPS , SHIP_COUNTS>(board,Ship::new(3, 1),  counts, placed_bit_ships),
+            2 => step_inner::<{ Ship::new(3, 2) }, NEXT_SHIP_INDEX, PLACED_SHIPS , SHIP_COUNTS>(board,Ship::new(3, 2),  counts, placed_bit_ships),
+            3 => step_inner::<{ Ship::new(4, 3) }, NEXT_SHIP_INDEX, PLACED_SHIPS , SHIP_COUNTS>(board,Ship::new(4, 3),  counts, placed_bit_ships),
+            4 => step_inner::<{ Ship::new(5, 4) }, NEXT_SHIP_INDEX, PLACED_SHIPS , SHIP_COUNTS>(board,Ship::new(5, 4),  counts, placed_bit_ships),
             _ => unreachable!()
             // _ => {0}
         };
@@ -242,6 +246,18 @@ fn step_inner<
     }
     configurations
 }
+const fn next_ship_length(placed_ships: usize, ship_counts: [u8; 5]) -> usize {
+    let mut running_sum = 0;
+    let mut length = 1;
+    while length <= 5 {
+        running_sum += ship_counts[length - 1] as usize;
+        if running_sum > placed_ships {
+            return length;
+        }
+        length += 1;
+    }
+    unreachable!()
+}
 const fn remaining_ships(ship_index: usize, next_ship_index: [usize; SHIP_COUNT]) -> usize {
     let mut ship_count = 0;
     let mut ship_index = ship_index;
@@ -252,89 +268,43 @@ const fn remaining_ships(ship_index: usize, next_ship_index: [usize; SHIP_COUNT]
     ship_count - 1
 }
 
-pub fn step(bit_board: BitBoard, ship_counts: &mut ShipCounts, placed_bit_ships: &PlacedBitShips) {}
-#[inline(never)]
-pub fn step_summing<const STARTING_SHIP: Ship>(
+pub fn step(
     bit_board: BitBoard,
-    ship_counts: &mut ship_counts::ShipCounts,
+    ship_counts: [u8; 5],
+    board_counts: &mut BoardCounts,
+    placed_bit_ships: &PlacedBitShips,
+) {
+    match ship_counts {
+        [_, 1, 2, 1, 1] => step_summing::<
+            { Ship::new(5, 4) },
+            { [255, 0, 1, 2, 3] },
+            { [0, 1, 2, 1, 1] },
+        >(bit_board, board_counts, placed_bit_ships),
+
+        rem => println!("Not implemented: {ship_counts:?}"),
+    }
+}
+#[inline(never)]
+pub fn step_summing<
+    const STARTING_SHIP: Ship,
+    const NEXT_SHIP_INDEX: [usize; 5],
+    const SHIP_COUNTS: [usize; 5],
+>(
+    bit_board: BitBoard,
+    board_counts: &mut BoardCounts,
     placed_bit_ships: &PlacedBitShips,
 ) {
     let mut counts: [_; 5] = std::array::from_fn(|_| ShipPositionCounts::new());
-    let total_boards = step_inner::<STARTING_SHIP, { [255, 0, 1, 2, 3] }>(
+    let total_boards = step_inner::<STARTING_SHIP, NEXT_SHIP_INDEX, 0, SHIP_COUNTS>(
         bit_board,
+        STARTING_SHIP,
         &mut counts,
         placed_bit_ships,
     );
-    ship_counts.board_count += total_boards;
-    ship_counts.add_ship_positions_counts::<{ Ship::new(2, 0) }>(&mut counts[0]);
-    ship_counts.add_ship_positions_counts::<{ Ship::new(3, 0) }>(&mut counts[1]);
-    ship_counts.add_ship_positions_counts::<{ Ship::new(3, 0) }>(&mut counts[2]);
-    ship_counts.add_ship_positions_counts::<{ Ship::new(4, 0) }>(&mut counts[3]);
-    ship_counts.add_ship_positions_counts::<{ Ship::new(5, 0) }>(&mut counts[4]);
-}
-
-#[derive(Clone, Copy)]
-pub struct BitIter {
-    current_u64: u64,
-    bits: u64x4,
-    offset: u8,
-    //     indecies: [u8; 256],
-    //     len: u8,
-}
-impl BitIter {
-    // #[inline(never)]
-    pub fn new(bits: u64x4) -> Self {
-        // let mut indecies = [0; 256];
-        // let nums_0 = u8x64::from_array(std::array::from_fn(|i| i as u8));
-        // let nums_1 = u8x64::from_array(std::array::from_fn(|i| i as u8 + 64));
-        // let nums_2 = u8x64::from_array(std::array::from_fn(|i| i as u8 + 128));
-        // let nums_3 = u8x64::from_array(std::array::from_fn(|i| i as u8 + 192));
-
-        // let offset_1 = bits[0].count_ones();
-        // let offset_2 = bits[0].count_ones() + bits[1].count_ones();
-        // let offset_3 = bits[0].count_ones() + bits[1].count_ones() + bits[2].count_ones();
-        // let len = (bits[0].count_ones()
-        //     + bits[1].count_ones()
-        //     + bits[2].count_ones()
-        //     + bits[3].count_ones()) as u8;
-
-        // #[rustfmt::skip]
-        // unsafe {
-        //     _mm512_mask_compressstoreu_epi8(indecies.as_mut_ptr(), bits[0], nums_0.into());
-        //     _mm512_mask_compressstoreu_epi8(indecies.as_mut_ptr().add(offset_1 as usize), bits[1], nums_1.into());
-        //     _mm512_mask_compressstoreu_epi8(indecies.as_mut_ptr().add(offset_2 as usize), bits[2], nums_2.into());
-        //     _mm512_mask_compressstoreu_epi8(indecies.as_mut_ptr().add(offset_3 as usize), bits[3], nums_3.into());
-        // }
-
-        Self {
-            current_u64: bits[0],
-            bits,
-            offset: 0,
-            // indecies,
-            // len,
-        }
-    }
-    fn dummy() -> Self {
-        Self::new(u64x4::splat(0))
-    }
-}
-impl Iterator for BitIter {
-    type Item = u8;
-
-    // #[inline(never)]
-    fn next(&mut self) -> core::prelude::v1::Option<Self::Item> {
-        loop {
-            let bit_index = self.current_u64.trailing_zeros() as u8;
-            if bit_index == 64 {
-                if self.offset == 64 * 3 {
-                    return None;
-                }
-                self.offset += 64;
-                self.current_u64 = self.bits[self.offset as usize / 64];
-                continue;
-            }
-            self.current_u64 ^= 1 << bit_index;
-            return Some(self.offset + bit_index);
-        }
-    }
+    board_counts.board_count += total_boards;
+    board_counts.add_ship_positions_counts::<{ Ship::new(2, 0) }>(&mut counts[0]);
+    board_counts.add_ship_positions_counts::<{ Ship::new(3, 0) }>(&mut counts[1]);
+    board_counts.add_ship_positions_counts::<{ Ship::new(3, 0) }>(&mut counts[2]);
+    board_counts.add_ship_positions_counts::<{ Ship::new(4, 0) }>(&mut counts[3]);
+    board_counts.add_ship_positions_counts::<{ Ship::new(5, 0) }>(&mut counts[4]);
 }
