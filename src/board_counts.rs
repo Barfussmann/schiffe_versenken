@@ -8,11 +8,12 @@ use super::BOARD_SIZE;
 use super::SIZE;
 use core::{
     convert::TryInto,
-    simd::{num::SimdUint, u64x4, u64x64},
+    simd::{u64x4, u64x64},
 };
 use std::{
     fmt::{Display, Write},
     iter::zip,
+    ops::Range,
     simd::prelude::*,
 };
 
@@ -20,14 +21,16 @@ use std::{
 pub struct ShipPositionCounts {
     counts: [u64x64; 4],
     added_boards: u64,
-    pub small_counts: BoardShipPositionCounts,
+    small_counts: [u8x64; 4],
+    bit_counts: [u64x4; 8],
 }
 impl ShipPositionCounts {
     pub fn new() -> ShipPositionCounts {
         ShipPositionCounts {
             counts: [u64x64::splat(0); 4],
             added_boards: 0,
-            small_counts: BoardShipPositionCounts::new(),
+            small_counts: [u8x64::splat(0); 4],
+            bit_counts: [u64x4::splat(0); 8],
         }
     }
     fn counts(&self) -> [u64; 256] {
@@ -42,34 +45,38 @@ impl ShipPositionCounts {
         let rem_index = index as usize % 64;
         self.counts[u64_index][rem_index] += counts;
     }
-    pub fn add_small(&mut self) {
-        for i in 0..4 {
-            self.counts[i] += self.small_counts.small_counts[i].cast();
-        }
-        self.small_counts = BoardShipPositionCounts::new();
-    }
-}
-#[derive(Debug, Clone)]
-pub struct BoardShipPositionCounts {
-    small_counts: [u8x64; 4],
-}
-impl BoardShipPositionCounts {
-    pub fn new() -> BoardShipPositionCounts {
-        BoardShipPositionCounts {
-            small_counts: [u8x64::splat(0); 4],
+
+    pub fn sum_bit_counts(&mut self, bit_range: Range<usize>) {
+        for bit_index in bit_range {
+            let mul = 2usize.pow(bit_index as u32);
+
+            for i in 0..4 {
+                self.counts[i] -= mask8x64::from_bitmask(self.bit_counts[bit_index][i])
+                    .to_int()
+                    .cast()
+                    * u64x64::splat(mul as u64);
+            }
+            self.bit_counts[bit_index] = u64x4::splat(0);
         }
     }
     // returns the count of the added ships
     pub fn add_possible_ship_positions(&mut self, ship_positions: u64x4) -> u64 {
         // let added_ships: u64x4 = unsafe { _mm256_popcnt_epi64(ship_positions.into()).into() };
+        // added_ships.reduce_sum()
+
+        let mut carry = ship_positions;
+        for i in 0..8 {
+            let next_carry = self.bit_counts[i] & carry;
+            self.bit_counts[i] ^= carry;
+            carry = next_carry;
+        }
 
         let mut added_ships = 0;
         for i in 0..4 {
             added_ships += ship_positions[i].count_ones() as u64;
-            self.small_counts[i] -= mask8x64::from_bitmask(ship_positions[i]).to_int().cast();
         }
+
         added_ships
-        // added_ships.reduce_sum()
     }
 }
 
@@ -98,7 +105,6 @@ impl ShipCountsSmall {
 pub struct BoardCounts {
     pub counts: [u64; BOARD_SIZE],
     pub board_count: u64,
-    small_counts: BoardShipPositionCounts,
 }
 
 impl BoardCounts {
@@ -106,7 +112,6 @@ impl BoardCounts {
         BoardCounts {
             counts: [0; BOARD_SIZE],
             board_count: 0,
-            small_counts: BoardShipPositionCounts::new(),
         }
     }
     pub fn add_board(&mut self, board: Board) {
@@ -141,6 +146,7 @@ impl BoardCounts {
         &mut self,
         ship_counts: &mut ShipPositionCounts,
     ) {
+        ship_counts.sum_bit_counts(0..8);
         let counts = ship_counts.counts();
         for i in 0..100 {
             let ship_count_x = counts[i];

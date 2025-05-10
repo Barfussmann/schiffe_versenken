@@ -4,19 +4,14 @@
     generic_const_exprs,
     stdarch_x86_avx512
 )]
-#![allow(dead_code, clippy::new_without_default, unused, incomplete_features)]
+#![allow(dead_code, clippy::new_without_default, incomplete_features)]
+// #![allow(dead_code, clippy::new_without_default, unused, incomplete_features)]
 // #![warn(clippy::pedantic)]
 
 mod board;
-use core::{hint::unreachable_unchecked, iter::Iterator, simd::prelude::*, unreachable};
 use std::time::Duration;
 
-#[allow(unused)]
-use bit_board::BitBoard;
-// use board::Board;
-use board_counts::{BoardShipPositionCounts, ShipCountsSmall, ShipPositionCounts};
-use ship::Ship;
-use solver::{PlacedBitShips, Solver, SpecialRng};
+use solver::Solver;
 
 const SIZE: usize = 10;
 const BOARD_SIZE: usize = (SIZE * SIZE).next_multiple_of(64);
