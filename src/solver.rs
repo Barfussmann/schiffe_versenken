@@ -161,10 +161,10 @@ fn step_inner<
     }
 
     let mut configurations = 0;
+
     // for ship_pos in BitIter::new(board.allowable_dyn(ship)) {
     for ship_pos in BitIter::new(board.allowable::<SHIP>()) {
-        let mut board = board;
-        board.place_ship::<SHIP>(ship_pos, placed_bit_ships);
+        let board = board.place_ship::<SHIP>(ship_pos, placed_bit_ships);
 
 
         let additional_configurations = match NEXT_SHIP_INDEX[SHIP.index] {
@@ -183,13 +183,14 @@ fn step_inner<
     }
     // flush the small count with the u8 to the big u64 nums to prevent overflow
     if const { remaining_ships(SHIP.index(), NEXT_SHIP_INDEX) } == 1 {
-        {
-            counts[NEXT_SHIP_INDEX[SHIP.index]].sum_bit_counts(7..8);
-        };
+
+        counts[NEXT_SHIP_INDEX[SHIP.index]].sum_single_bits();
+        counts[NEXT_SHIP_INDEX[SHIP.index]].sum_bit_counts(7..8);
+
     }
     configurations
 }
-const fn next_ship_length(placed_ships: usize, ship_counts: [u8; 5]) -> usize {
+const fn next_ship_length(placed_ships: usize, ship_counts: [u8; SHIP_COUNT]) -> usize {
     let mut running_sum = 0;
     let mut length = 1;
     while length <= 5 {

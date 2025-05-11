@@ -2,7 +2,9 @@
     portable_simd,
     adt_const_params,
     generic_const_exprs,
-    stdarch_x86_avx512
+    stdarch_x86_avx512,
+    iter_array_chunks,
+    array_chunks
 )]
 #![allow(dead_code, clippy::new_without_default, incomplete_features)]
 // #![allow(dead_code, clippy::new_without_default, unused, incomplete_features)]

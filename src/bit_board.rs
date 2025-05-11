@@ -85,7 +85,9 @@ impl BitBoard {
             // self.protected_and_ship[i] &= placed_ship_board.protected_and_ship[i];
         }
     }
-    pub fn place_ship<const S: Ship>(&mut self, index: u8, placed_bit_ships: &PlacedBitShips) {
+    #[must_use]
+    pub fn place_ship<const S: Ship>(self, index: u8, placed_bit_ships: &PlacedBitShips) -> Self {
+        let mut this = self;
         let placed_ship_board = unsafe {
             placed_bit_ships
                 .placed_ships
@@ -94,8 +96,9 @@ impl BitBoard {
         };
         // we only need the ships that are shorter than the current ship
         for i in 0..S.length().div_ceil(2) {
-            self.protected_and_ship[i] &= placed_ship_board.protected_and_ship[i];
+            this.protected_and_ship[i] &= placed_ship_board.protected_and_ship[i];
         }
+        this
     }
     pub fn placed_ships_to_board(&self) -> Board {
         let mut board = Board::new();
