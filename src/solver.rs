@@ -1,58 +1,18 @@
 use std::{
-    sync::LazyLock,
+    simd::{num::SimdUint, u64x4},
     time::{Duration, Instant},
 };
 
 use crate::{
     SIZE,
-    bit_board::BitBoard,
+    bit_board::{BitBoard, PlacedBitShips},
     bit_iter::BitIter,
-    board::{Board, Cell, Direction},
+    board::{Board, Cell},
     board_counts::{BoardCounts, ShipPositionCounts},
     ship::Ship,
 };
 use num_format::{Locale, ToFormattedString};
 use rayon::prelude::*;
-
-pub struct PlacedBitShips {
-    pub placed_ships: [[BitBoard; 256]; 6],
-}
-impl PlacedBitShips {
-    pub fn new() -> &'static Self {
-        const SHIPS: [Ship; 6] = [
-            Ship::new(1, 0),
-            Ship::new(2, 0),
-            Ship::new(3, 0),
-            Ship::new(4, 0),
-            Ship::new(5, 0),
-            Ship::new(6, 0),
-        ];
-
-        static PLACED_BIT_SHIPS: LazyLock<PlacedBitShips> = LazyLock::new(|| {
-            assert!(
-                SHIPS.is_sorted_by_key(|ship| ship.index()),
-                "SHIPS has to be sorted by ship.index()"
-            );
-            let placed_ships = SHIPS.map(|ship| {
-                let mut placed_ships = [BitBoard::new(Board::new()); 256];
-                for dir in [Direction::Horizontal, Direction::Vertical] {
-                    for y in 0..SIZE {
-                        for x in 0..SIZE {
-                            let bit_board_index = dir as usize * 128 + (y * 10 + x);
-                            let mut board = Board::new();
-                            board.const_place_ship(x, y, dir, ship);
-
-                            placed_ships[bit_board_index] = BitBoard::new(board);
-                        }
-                    }
-                }
-                placed_ships
-            });
-            PlacedBitShips { placed_ships }
-        });
-        &PLACED_BIT_SHIPS
-    }
-}
 
 pub struct Solver {
     pub placed_bit_ships: &'static PlacedBitShips,
@@ -77,10 +37,13 @@ impl Solver {
         let (x, y) = self.get_best_water_cell(&ship_counts);
 
         let elapsed_time = start_time.elapsed();
+        // let boards_per_second = (ship_counts.board_count as f64 / 1.0) as u64;
+        let boards_per_second =
+            (ship_counts.board_count as f64 / elapsed_time.as_secs_f64()) as u64;
         println!(
-            "in: {:4.3?} calculated: {:12}",
+            "in: {:4.3?} calculated: {:12} hz",
             elapsed_time,
-            ship_counts.board_count.to_formatted_string(&Locale::en)
+            boards_per_second.to_formatted_string(&Locale::en)
         );
         println!("ship_counts: {ship_counts}");
         println!(
@@ -154,13 +117,32 @@ fn step_inner<
     board: BitBoard,
     counts: &mut [ShipPositionCounts; 5],
     placed_bit_ships: &PlacedBitShips,
-) -> u64 {
+) -> u64x4 {
     // directly add the the positions of all possible placements of the last ship
     if const { remaining_ships(SHIP.index(), NEXT_SHIP_INDEX) } == 0 {
         return counts[SHIP.index].add_possible_ship_positions(board.allowable::<SHIP>())
     }
 
-    let mut configurations = 0;
+    let mut configurations = u64x4::splat(0);
+    // if const { remaining_ships(SHIP.index(), NEXT_SHIP_INDEX) } == 1 {
+
+    //     for pos_chunk in ChunkedBitIter::new(board.allowable::<SHIP>()) {
+    //         let allowable =
+    //             pos_chunk.map(|pos| board.place_ship::<SHIP>(pos, placed_bit_ships).allowable::< {Ship::new(2, 0) } >());
+
+    //         let additional_configurations =
+    //             counts[Ship::new(2, 0).index].add_possible_ship_positions_chunked(allowable);
+
+    //         for i in 0..ChunkedBitIter::CHUNK_SIZE {
+    //             counts[SHIP.index].add_single_ship(pos_chunk[i], additional_configurations[i]);
+    //         }
+    //         configurations += additional_configurations.iter().sum::<u64>();
+    //     }
+    //     // counts[NEXT_SHIP_INDEX[SHIP.index]].sum_single_bits();
+    //     counts[NEXT_SHIP_INDEX[SHIP.index]].sum_bit_counts(7..8);
+    //     return configurations;
+    // }
+
 
     // for ship_pos in BitIter::new(board.allowable_dyn(ship)) {
     for ship_pos in BitIter::new(board.allowable::<SHIP>()) {
@@ -237,7 +219,7 @@ pub fn step_summing<const STARTING_SHIP: Ship, const NEXT_SHIP_INDEX: [usize; 5]
     let mut counts: [_; 5] = std::array::from_fn(|_| ShipPositionCounts::new());
     let total_boards =
         step_inner::<STARTING_SHIP, NEXT_SHIP_INDEX>(bit_board, &mut counts, placed_bit_ships);
-    board_counts.board_count += total_boards;
+    board_counts.board_count += total_boards.reduce_sum();
     board_counts.add_ship_positions_counts::<{ Ship::new(2, 0) }>(&mut counts[0]);
     board_counts.add_ship_positions_counts::<{ Ship::new(3, 0) }>(&mut counts[1]);
     board_counts.add_ship_positions_counts::<{ Ship::new(3, 0) }>(&mut counts[2]);

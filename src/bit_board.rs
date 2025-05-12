@@ -1,13 +1,17 @@
 use core::simd::{simd_swizzle, u64x4};
-use std::simd::prelude::*;
 #[allow(unused)]
 use std::{
     arch::x86_64::{_mm256_popcnt_epi64, _mm512_popcnt_epi64},
     mem::transmute,
     simd::{Mask, Swizzle, cmp::SimdPartialOrd, num::SimdUint},
 };
+use std::{simd::prelude::*, sync::LazyLock};
 
-use crate::{bit_iter::BitIter, board::Board, solver::PlacedBitShips};
+use crate::{
+    SIZE,
+    bit_iter::BitIter,
+    board::{Board, Direction},
+};
 use crate::{board::Cell, ship::Ship};
 #[derive(Clone, Copy)]
 #[repr(align(256))]
@@ -110,5 +114,45 @@ impl BitBoard {
             board.cells[set_ship as usize] = Cell::Ship;
         }
         board
+    }
+}
+
+pub struct PlacedBitShips {
+    pub placed_ships: [[BitBoard; 256]; 6],
+}
+impl PlacedBitShips {
+    pub fn new() -> &'static Self {
+        const SHIPS: [Ship; 6] = [
+            Ship::new(1, 0),
+            Ship::new(2, 0),
+            Ship::new(3, 0),
+            Ship::new(4, 0),
+            Ship::new(5, 0),
+            Ship::new(6, 0),
+        ];
+
+        static PLACED_BIT_SHIPS: LazyLock<PlacedBitShips> = LazyLock::new(|| {
+            assert!(
+                SHIPS.is_sorted_by_key(|ship| ship.index()),
+                "SHIPS has to be sorted by ship.index()"
+            );
+            let placed_ships = SHIPS.map(|ship| {
+                let mut placed_ships = [BitBoard::new(Board::new()); 256];
+                for dir in [Direction::Horizontal, Direction::Vertical] {
+                    for y in 0..SIZE {
+                        for x in 0..SIZE {
+                            let bit_board_index = dir as usize * 128 + (y * 10 + x);
+                            let mut board = Board::new();
+                            board.const_place_ship(x, y, dir, ship);
+
+                            placed_ships[bit_board_index] = BitBoard::new(board);
+                        }
+                    }
+                }
+                placed_ships
+            });
+            PlacedBitShips { placed_ships }
+        });
+        &PLACED_BIT_SHIPS
     }
 }

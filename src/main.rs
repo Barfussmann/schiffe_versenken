@@ -6,10 +6,14 @@
     iter_array_chunks,
     array_chunks
 )]
-#![allow(dead_code, clippy::new_without_default, incomplete_features)]
+#![allow(
+    dead_code,
+    clippy::new_without_default,
+    incomplete_features,
+    clippy::needless_range_loop
+)]
 // #![allow(dead_code, clippy::new_without_default, unused, incomplete_features)]
 // #![warn(clippy::pedantic)]
-
 mod board;
 use std::time::Duration;
 
