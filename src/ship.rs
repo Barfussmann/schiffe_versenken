@@ -15,7 +15,11 @@ pub struct Ship {
     pub index: usize,
 }
 
+const LENGTHS: [usize; 5] = [5, 4, 3, 3, 2];
 impl Ship {
+    pub fn length_from_index(index: usize) -> usize {
+        LENGTHS[index]
+    }
     pub const fn new(length: usize, index: usize) -> Ship {
         let length = match length {
             1 => ShipLength::_1,

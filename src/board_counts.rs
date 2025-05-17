@@ -1,5 +1,4 @@
 use crate::{
-    bit_board::BitBoard,
     bit_iter::ChunkedBitIter,
     board::{Board, Cell},
     ship::Ship,
@@ -20,61 +19,67 @@ use std::{
 
 #[derive(Debug, Clone)]
 pub struct ShipPositionCounts {
-    counts: [u64x4; 256],
-    counts_bits: [u64x64; 4],
+    counts: [u64x64; 4],
     added_boards: u64,
     small_counts: [u8x64; 4],
     bit_counts: [u64x4; 8],
+    bit_counts_total: [u64x4; 32],
     added_bit_fields: usize,
     bit_fields_to_sum: [u64x4; 256],
 }
 impl ShipPositionCounts {
     pub fn new() -> ShipPositionCounts {
         ShipPositionCounts {
-            counts: [u64x4::splat(0); 256],
-            counts_bits: [u64x64::splat(0); 4],
+            counts: [u64x64::splat(0); 4],
             added_boards: 0,
             small_counts: [u8x64::splat(0); 4],
             bit_counts: [u64x4::splat(0); 8],
+            bit_counts_total: [u64x4::splat(0); 32],
             added_bit_fields: 0,
             bit_fields_to_sum: [u64x4::splat(0); 256],
         }
     }
     fn counts(&self) -> [u64; 256] {
-        let mut counts = [0; 256];
-        for i in 0..256 {
-            counts[i] = self.counts[i].reduce_sum() + self.counts_bits[i / 64][i % 64];
-        }
-        counts
-        // self.counts
-        //     .map(|x| x.to_array())
-        //     .as_flattened()
-        //     .try_into()
-        //     .unwrap()
+        // let mut counts = [0; 256];
+        // for i in 0..256 {
+        //     counts[i] = self.counts[i].reduce_sum() + self.counts_bits[i / 64][i % 64];
+        // }
+        // counts
+        self.counts
+            .map(|x| x.to_array())
+            .as_flattened()
+            .try_into()
+            .unwrap()
     }
-    pub fn add_single_ship(&mut self, index: u8, counts: u64x4) {
-        self.counts[index as usize] += counts;
-        // let u64_index = index as usize / 64;
-        // let rem_index = index as usize % 64;
-        // self.counts[u64_index][rem_index] += counts;
+    pub fn add_single_ship(&mut self, index: u8, counts: u64) {
+        // self.counts[index as usize] += counts;
+        let u64_index = index as usize / 64;
+        let rem_index = index as usize % 64;
+        self.counts[u64_index][rem_index] += counts;
     }
     #[rustfmt::skip]
-    // #[inline(never)]
     pub fn sum_single_bits(&mut self) {
 
         // unsafe {
         //     self.bit_fields_to_sum.get_unchecked_mut(self.added_bit_fields..self.added_bit_fields.next_multiple_of(8)).fill(u64x4::splat(0));
         // }
-        self.bit_fields_to_sum[self.added_bit_fields..self.added_bit_fields.next_multiple_of(8)].fill(u64x4::splat(0));
+        // self.bit_fields_to_sum[self.added_bit_fields..self.added_bit_fields.next_multiple_of(8)].fill(u64x4::splat(0));
+        // self.bit_fields_to_sum[self.added_bit_fields..self.added_bit_fields.next_multiple_of(8)].fill(u64x4::splat(0));
+        for i in self.added_bit_fields..self.added_bit_fields.next_multiple_of(8) {
+            unsafe {
+                *self.bit_fields_to_sum.get_unchecked_mut(i) = u64x4::splat(0);
+            }
+        }
         for chunk in self.bit_fields_to_sum.array_chunks::<8>().take(self.added_bit_fields.div_ceil(8)) {
 
             let a_3 = bit_adder(bit_adder([chunk[0]], [chunk[1]]), bit_adder([chunk[2]], [chunk[3]]));
             let b_3 = bit_adder(bit_adder([chunk[4]], [chunk[5]]), bit_adder([chunk[6]], [chunk[7]]));
 
-            let a_4 = bit_adder(a_3, b_3);
+            let mut a_4 = bit_adder(a_3, b_3);
 
-            let bit_counts = self.bit_counts;
-            self.bit_counts.copy_from_slice(&bit_adder([a_4[0], a_4[1], a_4[2], a_4[3], u64x4::splat(0), u64x4::splat(0), u64x4::splat(0), u64x4::splat(0)], bit_counts)[..8]);
+            bit_adder_in_place(&mut self.bit_counts, &mut a_4);
+            // let bit_counts = self.bit_counts;
+            // self.bit_counts.copy_from_slice(&bit_adder([a_4[0], a_4[1], a_4[2], a_4[3], u64x4::splat(0), u64x4::splat(0), u64x4::splat(0), u64x4::splat(0)], bit_counts)[..8]);
         }
         // for i in 0..self.added_bit_fields {
         //     let mut carry = self.bit_fields_to_sum[i];
@@ -86,17 +91,31 @@ impl ShipPositionCounts {
         // }
         self.added_bit_fields = 0;
     }
-    pub fn sum_bit_counts(&mut self, bit_range: Range<usize>) {
-        for bit_index in bit_range {
+    // #[inline(never)]
+    pub fn sum_bit_counts_to_total_bit_counts(&mut self) {
+        bit_adder_in_place(&mut self.bit_counts_total, &mut self.bit_counts);
+    }
+    #[inline(never)]
+    pub fn sum_bit_counts(&mut self) {
+        for bit_index in 0..8 {
             let mul = 2usize.pow(bit_index as u32);
-
             for i in 0..4 {
-                self.counts_bits[i] -= mask8x64::from_bitmask(self.bit_counts[bit_index][i])
+                self.counts[i] -= mask8x64::from_bitmask(self.bit_counts[bit_index][i])
                     .to_int()
                     .cast()
                     * u64x64::splat(mul as u64);
             }
             self.bit_counts[bit_index] = u64x4::splat(0);
+        }
+        for bit_index in 0..self.bit_counts_total.len() {
+            let mul = 2usize.pow(bit_index as u32);
+            for i in 0..4 {
+                self.counts[i] -= mask8x64::from_bitmask(self.bit_counts_total[bit_index][i])
+                    .to_int()
+                    .cast()
+                    * u64x64::splat(mul as u64);
+            }
+            self.bit_counts_total[bit_index] = u64x4::splat(0);
         }
     }
     // returns the count of the added ships
@@ -142,12 +161,14 @@ impl ShipPositionCounts {
         added_ships
     }
     // returns the count of the added ships
-    pub fn add_possible_ship_positions(&mut self, ship_positions: u64x4) -> u64x4 {
+    pub fn add_possible_ship_positions(&mut self, ship_positions: u64x4) -> u64 {
         unsafe {
             *self
                 .bit_fields_to_sum
                 .get_unchecked_mut(self.added_bit_fields) = ship_positions;
         }
+        self.added_bit_fields += 1;
+
         // let mut carry = ship_positions;
         // for i in 0..8 {
         //     let next_carry = self.bit_counts[i] & carry;
@@ -155,25 +176,37 @@ impl ShipPositionCounts {
         //     carry = next_carry;
         // }
 
-        self.added_bit_fields += 1;
-
-        // let mut added_ships = 0;
-        // for i in 0..4 {
-        //     // added_ships += 17;
-        //     added_ships += ship_positions[i].count_ones() as u64;
-        //     // dbg!(ship_positions[i].count_ones() as u64);
-        // }
-        // added_ships
-
-        u64x4::from_array([
-            ship_positions[0].count_ones() as u64,
-            ship_positions[1].count_ones() as u64,
-            ship_positions[2].count_ones() as u64,
-            ship_positions[3].count_ones() as u64,
-        ])
+        let mut added_ships = 0;
+        for i in 0..4 {
+            // added_ships += 17;
+            added_ships += ship_positions[i].count_ones() as u64;
+            // dbg!(ship_positions[i].count_ones() as u64);
+        }
+        added_ships
+        // u64x4::from_array([
+        //     ship_positions[0].count_ones() as u64,
+        //     ship_positions[1].count_ones() as u64,
+        //     ship_positions[2].count_ones() as u64,
+        //     ship_positions[3].count_ones() as u64,
+        // ])
     }
 }
 
+fn bit_adder_in_place<const N: usize, const M: usize>(vals: &mut [u64x4; N], b: &mut [u64x4; M]) {
+    let mut carry = u64x4::splat(0);
+    assert!(M <= N);
+    for i in 0..M {
+        let a = vals[i];
+        vals[i] = a ^ b[i] ^ carry;
+        carry = (a & b[i]) | (carry & (a ^ b[i]));
+        b[i] = u64x4::splat(0);
+    }
+    for i in M..N {
+        let a = vals[i];
+        vals[i] = a ^ carry;
+        carry &= a
+    }
+}
 fn bit_adder<const N: usize>(a: [u64x4; N], b: [u64x4; N]) -> [u64x4; N + 1] {
     let mut res = [u64x4::splat(0); N + 1];
     let mut carry = u64x4::splat(0);
@@ -184,27 +217,6 @@ fn bit_adder<const N: usize>(a: [u64x4; N], b: [u64x4; N]) -> [u64x4; N + 1] {
     }
     res[N] = carry;
     res
-}
-
-#[derive(Debug, Clone)]
-pub struct ShipCountsSmall {
-    small_counts: [u8x64; 2],
-    pub added_ships: u64,
-}
-impl ShipCountsSmall {
-    pub fn new() -> ShipCountsSmall {
-        ShipCountsSmall {
-            small_counts: [u8x64::splat(0); 2],
-            added_ships: 0,
-        }
-    }
-    // #[inline(never)]
-    pub fn add_bit_board(&mut self, board: BitBoard) {
-        self.added_ships += 1;
-        let ship = board.ship();
-        self.small_counts[0] -= mask8x64::from_bitmask(ship[0]).to_int().cast();
-        self.small_counts[1] -= mask8x64::from_bitmask(ship[1]).to_int().cast();
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -231,28 +243,12 @@ impl BoardCounts {
         }
         self.board_count += 1;
     }
-    // #[inline(never)]
-    pub fn add_small_counts(&mut self, small_counts: &mut ShipCountsSmall) {
-        for i in 0..64 {
-            self.counts[i] += small_counts.small_counts[0][i] as u64;
-        }
-        // high bits
-        for i in 0..36 {
-            self.counts[i + 64] += small_counts.small_counts[1][i] as u64;
-        }
-        self.board_count += small_counts.added_ships;
-        assert!(
-            small_counts.added_ships < 256,
-            "added count is to big. The result could be wrong"
-        );
-        *small_counts = ShipCountsSmall::new();
-    }
-    // #[inline(never)]
+    #[inline(never)]
     pub fn add_ship_positions_counts<const SHIP: Ship>(
         &mut self,
         ship_counts: &mut ShipPositionCounts,
     ) {
-        ship_counts.sum_bit_counts(0..8);
+        ship_counts.sum_bit_counts();
         let counts = ship_counts.counts();
         for i in 0..100 {
             let ship_count_x = counts[i];
@@ -264,7 +260,6 @@ impl BoardCounts {
                 }
             }
         }
-        // self.board_count += ship_counts.added_boards;
         *ship_counts = ShipPositionCounts::new();
     }
     pub fn add_other_count(&mut self, other: Self) {

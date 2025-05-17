@@ -1,7 +1,4 @@
-use std::{
-    simd::{num::SimdUint, u64x4},
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use crate::{
     SIZE,
@@ -92,11 +89,6 @@ impl Solver {
                         &mut board_counts,
                         self.placed_bit_ships,
                     );
-                    // step_summing::<{ Ship::new(5, 4) }>(
-                    //     bit_board,
-                    //     &mut board_counts,
-                    //     self.placed_bit_ships,
-                    // );
                 }
                 board_counts
             })
@@ -108,22 +100,27 @@ impl Solver {
 }
 
 const SHIP_COUNT: usize = 5;
-#[rustfmt::skip]
+
 #[inline(always)]
-fn step_inner<
-    const SHIP: Ship,
-    const NEXT_SHIP_INDEX: [usize; SHIP_COUNT],
->(
+fn step_inner_test<const INDEX: usize, const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>(
     board: BitBoard,
     counts: &mut [ShipPositionCounts; 5],
     placed_bit_ships: &PlacedBitShips,
-) -> u64x4 {
-    // directly add the the positions of all possible placements of the last ship
-    if const { remaining_ships(SHIP.index(), NEXT_SHIP_INDEX) } == 0 {
-        return counts[SHIP.index].add_possible_ship_positions(board.allowable::<SHIP>())
+) -> u64 {
+    if !SHOULD_PLACE_SHIP[INDEX] {
+        return step_inner_test_dispatch::<INDEX, SHOULD_PLACE_SHIP>(
+            board,
+            counts,
+            placed_bit_ships,
+        );
     }
 
-    let mut configurations = u64x4::splat(0);
+    // directly add the the positions of all possible placements of the last ship
+    if const { remaining_ships_test(INDEX, SHOULD_PLACE_SHIP) } == 1 {
+        return counts[INDEX].add_possible_ship_positions(board.allowable::<INDEX>());
+    }
+
+    let mut configurations = 0;
     // if const { remaining_ships(SHIP.index(), NEXT_SHIP_INDEX) } == 1 {
 
     //     for pos_chunk in ChunkedBitIter::new(board.allowable::<SHIP>()) {
@@ -143,35 +140,67 @@ fn step_inner<
     //     return configurations;
     // }
 
-
     // for ship_pos in BitIter::new(board.allowable_dyn(ship)) {
-    for ship_pos in BitIter::new(board.allowable::<SHIP>()) {
-        let board = board.place_ship::<SHIP>(ship_pos, placed_bit_ships);
+    for ship_pos in BitIter::new(board.allowable::<INDEX>()) {
+        let board = board.place_ship::<INDEX>(ship_pos, placed_bit_ships);
 
-
-        let additional_configurations = match NEXT_SHIP_INDEX[SHIP.index] {
-            0 => step_inner::<{ Ship::new(2, 0) }, NEXT_SHIP_INDEX>(board,  counts, placed_bit_ships),
-            1 => step_inner::<{ Ship::new(3, 1) }, NEXT_SHIP_INDEX>(board,  counts, placed_bit_ships),
-            2 => step_inner::<{ Ship::new(3, 2) }, NEXT_SHIP_INDEX>(board,  counts, placed_bit_ships),
-            3 => step_inner::<{ Ship::new(4, 3) }, NEXT_SHIP_INDEX>(board,  counts, placed_bit_ships),
-            4 => step_inner::<{ Ship::new(5, 4) }, NEXT_SHIP_INDEX>(board,  counts, placed_bit_ships),
-            _ => unreachable!()
-            // _ => {0}
-        };
+        let additional_configurations =
+            step_inner_test_dispatch::<INDEX, SHOULD_PLACE_SHIP>(board, counts, placed_bit_ships);
         // addes the currently placed ship with the amount of differnt configurations
-        counts[SHIP.index].add_single_ship(ship_pos, additional_configurations);
+        counts[INDEX].add_single_ship(ship_pos, additional_configurations);
 
         configurations += additional_configurations;
     }
     // flush the small count with the u8 to the big u64 nums to prevent overflow
-    if const { remaining_ships(SHIP.index(), NEXT_SHIP_INDEX) } == 1 {
-
-        counts[NEXT_SHIP_INDEX[SHIP.index]].sum_single_bits();
-        counts[NEXT_SHIP_INDEX[SHIP.index]].sum_bit_counts(7..8);
-
+    if const { remaining_ships_test(INDEX, SHOULD_PLACE_SHIP) } == 2 {
+        counts[const { last_ship_to_place(SHOULD_PLACE_SHIP) }].sum_single_bits();
+        // counts[const { last_ship_to_place(SHOULD_PLACE_SHIP) }]
+        //     .sum_bit_counts_to_total_bit_counts();
+        // counts[const { last_ship_to_place(SHOULD_PLACE_SHIP) }].sum_bit_counts(7..8);
     }
     configurations
 }
+#[rustfmt::skip]
+fn step_inner_test_dispatch<
+    const INDEX: usize,
+    const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT],
+>(
+    board: BitBoard,
+    counts: &mut [ShipPositionCounts; 5],
+    placed_bit_ships: &PlacedBitShips,
+) -> u64 {
+    match INDEX {
+        0 => step_inner_test::<1, SHOULD_PLACE_SHIP>(board,  counts, placed_bit_ships),
+        1 => step_inner_test::<2, SHOULD_PLACE_SHIP>(board,  counts, placed_bit_ships),
+        2 => step_inner_test::<3, SHOULD_PLACE_SHIP>(board,  counts, placed_bit_ships),
+        3 => step_inner_test::<4, SHOULD_PLACE_SHIP>(board,  counts, placed_bit_ships),
+        4 => step_inner_test::<5, SHOULD_PLACE_SHIP>(board,  counts, placed_bit_ships),
+        _ => unreachable!()
+    }
+}
+const fn remaining_ships_test(start_index: usize, should_place_ship: [bool; SHIP_COUNT]) -> usize {
+    let mut ship_count = 0;
+    let mut ship_index = start_index;
+    while ship_index < SHIP_COUNT {
+        if should_place_ship[ship_index] {
+            ship_count += 1;
+        }
+        ship_index += 1;
+    }
+    ship_count
+}
+const fn last_ship_to_place(should_place_ship: [bool; SHIP_COUNT]) -> usize {
+    let mut i = 0;
+    let mut max_ship = 0;
+    while i < SHIP_COUNT {
+        if should_place_ship[i] {
+            max_ship = i;
+        }
+        i += 1;
+    }
+    max_ship
+}
+
 const fn next_ship_length(placed_ships: usize, ship_counts: [u8; SHIP_COUNT]) -> usize {
     let mut running_sum = 0;
     let mut length = 1;
@@ -194,6 +223,7 @@ const fn remaining_ships(ship_index: usize, next_ship_index: [usize; SHIP_COUNT]
     ship_count - 1
 }
 
+#[rustfmt::skip]
 pub fn step(
     bit_board: BitBoard,
     ship_counts: [u8; 5],
@@ -201,11 +231,7 @@ pub fn step(
     placed_bit_ships: &PlacedBitShips,
 ) {
     match ship_counts {
-        [_, 1, 2, 1, 1] => step_summing::<{ Ship::new(5, 4) }, { [255, 0, 1, 2, 3] }>(
-            bit_board,
-            board_counts,
-            placed_bit_ships,
-        ),
+        [_, 1, 2, 1, 1] => step_summing::<{ Ship::new(5, 4) }, { [255, 0, 1, 2, 3] }>(bit_board, board_counts, placed_bit_ships),
 
         rem => println!("Not implemented: {rem:?}"),
     }
@@ -217,12 +243,17 @@ pub fn step_summing<const STARTING_SHIP: Ship, const NEXT_SHIP_INDEX: [usize; 5]
     placed_bit_ships: &PlacedBitShips,
 ) {
     let mut counts: [_; 5] = std::array::from_fn(|_| ShipPositionCounts::new());
-    let total_boards =
-        step_inner::<STARTING_SHIP, NEXT_SHIP_INDEX>(bit_board, &mut counts, placed_bit_ships);
-    board_counts.board_count += total_boards.reduce_sum();
-    board_counts.add_ship_positions_counts::<{ Ship::new(2, 0) }>(&mut counts[0]);
-    board_counts.add_ship_positions_counts::<{ Ship::new(3, 0) }>(&mut counts[1]);
+    let total_boards = step_inner_test::<0, { [true, true, true, true, true] }>(
+        bit_board,
+        &mut counts,
+        placed_bit_ships,
+    );
+    // let total_boards =
+    //     step_inner::<STARTING_SHIP, 4, NEXT_SHIP_INDEX>(bit_board, &mut counts, placed_bit_ships);
+    board_counts.board_count += total_boards;
+    board_counts.add_ship_positions_counts::<{ Ship::new(5, 0) }>(&mut counts[0]);
+    board_counts.add_ship_positions_counts::<{ Ship::new(4, 0) }>(&mut counts[1]);
     board_counts.add_ship_positions_counts::<{ Ship::new(3, 0) }>(&mut counts[2]);
-    board_counts.add_ship_positions_counts::<{ Ship::new(4, 0) }>(&mut counts[3]);
-    board_counts.add_ship_positions_counts::<{ Ship::new(5, 0) }>(&mut counts[4]);
+    board_counts.add_ship_positions_counts::<{ Ship::new(3, 0) }>(&mut counts[3]);
+    board_counts.add_ship_positions_counts::<{ Ship::new(2, 0) }>(&mut counts[4]);
 }

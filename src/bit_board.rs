@@ -20,8 +20,8 @@ pub struct BitBoard {
 }
 impl BitBoard {
     pub const INSTRUCTION_PARALLELISM: usize = 1;
-    pub fn allowable<const S: Ship>(&self) -> u64x4 {
-        match S.length() {
+    pub fn allowable<const SHIP_INDEX: usize>(&self) -> u64x4 {
+        match Ship::length_from_index(SHIP_INDEX) {
             1 => simd_swizzle!(self.protected_and_ship[0], [2, 3, 2, 3]),
             2 => simd_swizzle!(self.protected_and_ship[0], [4, 5, 6, 7]),
             3 => simd_swizzle!(self.protected_and_ship[1], [0, 1, 2, 3]),
@@ -72,34 +72,21 @@ impl BitBoard {
             ],
         }
     }
-    // #[inline(never)]
-    pub fn place_ship_dyn(&mut self, ship: Ship, index: usize, placed_bit_ships: &PlacedBitShips) {
-        let placed_ship_board = unsafe {
-            placed_bit_ships
-                .placed_ships
-                .get_unchecked(ship.index())
-                .get_unchecked(index)
-        };
-        // we only need the ships that are shorter than the current ship
-        for i in 0..ship.length().div_ceil(2) {
-            unsafe {
-                *self.protected_and_ship.get_unchecked_mut(i) &=
-                    *placed_ship_board.protected_and_ship.get_unchecked(i);
-            }
-            // self.protected_and_ship[i] &= placed_ship_board.protected_and_ship[i];
-        }
-    }
     #[must_use]
-    pub fn place_ship<const S: Ship>(self, index: u8, placed_bit_ships: &PlacedBitShips) -> Self {
+    pub fn place_ship<const SHIP_INDEX: usize>(
+        self,
+        index: u8,
+        placed_bit_ships: &PlacedBitShips,
+    ) -> Self {
         let mut this = self;
         let placed_ship_board = unsafe {
             placed_bit_ships
                 .placed_ships
-                .get_unchecked(S.index())
+                .get_unchecked(SHIP_INDEX)
                 .get_unchecked(index as usize)
         };
         // we only need the ships that are shorter than the current ship
-        for i in 0..S.length().div_ceil(2) {
+        for i in 0..Ship::length_from_index(SHIP_INDEX).div_ceil(2) {
             this.protected_and_ship[i] &= placed_ship_board.protected_and_ship[i];
         }
         this
@@ -118,17 +105,16 @@ impl BitBoard {
 }
 
 pub struct PlacedBitShips {
-    pub placed_ships: [[BitBoard; 256]; 6],
+    pub placed_ships: [[BitBoard; 256]; 5],
 }
 impl PlacedBitShips {
     pub fn new() -> &'static Self {
-        const SHIPS: [Ship; 6] = [
-            Ship::new(1, 0),
-            Ship::new(2, 0),
-            Ship::new(3, 0),
-            Ship::new(4, 0),
+        const SHIPS: [Ship; 5] = [
             Ship::new(5, 0),
-            Ship::new(6, 0),
+            Ship::new(4, 0),
+            Ship::new(3, 0),
+            Ship::new(3, 0),
+            Ship::new(2, 0),
         ];
 
         static PLACED_BIT_SHIPS: LazyLock<PlacedBitShips> = LazyLock::new(|| {
