@@ -183,7 +183,7 @@ pub fn step_summing<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>(
         step_inner::<0, { SHOULD_PLACE_SHIP }>(bit_board, &mut counts, placed_bit_ships);
 
     // checks if only one ship is placed and sums the last placed ship. It otherwise only happens when placing atleast two ships.
-    gitif SHOULD_PLACE_SHIP.iter().filter(|x| **x).count() == 1 {
+    if SHOULD_PLACE_SHIP.iter().filter(|x| **x).count() == 1 {
         counts[const { last_ship_to_place(SHOULD_PLACE_SHIP) }].sum_single_bits();
         counts[const { last_ship_to_place(SHOULD_PLACE_SHIP) }]
             .sum_bit_counts_to_total_bit_counts();
