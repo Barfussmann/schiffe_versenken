@@ -15,7 +15,6 @@
 // #![allow(dead_code, clippy::new_without_default, unused, incomplete_features)]
 // #![warn(clippy::pedantic)]
 mod board;
-use std::{hint::black_box, time::Duration};
 
 use solver::Solver;
 
@@ -34,38 +33,32 @@ fn main() {
         .build_global()
         .unwrap();
 
-    let solver = Solver::new();
-    // let ship_amounts = std::hint::black_box([0, 0, 0, 0, 1]);
-    // let ship_amounts = std::hint::black_box([4, 3, 2, 1, 0]); // russian fleet
+    const SHOULD_PLACE_SHIP: [bool; 5] = [true; 5];
 
-    let time_to_run = Duration::from_millis(1000);
-    // loop {
-    //     solver.run(time_to_run, black_box([0, 1, 2, 1, 1]));
-    //     // println!("{}", solver.current_board);
-    //     solver.reset();
-    // }
+    const F: bool = false;
+    const T: bool = true;
 
-    solver.run(time_to_run, black_box([0, 0, 0, 0, 1]));
-    solver.run(time_to_run, black_box([0, 0, 0, 1, 0]));
-    solver.run(time_to_run, black_box([0, 0, 1, 0, 0]));
-    solver.run(time_to_run, black_box([0, 1, 0, 0, 0]));
-    solver.run(time_to_run, black_box([0, 0, 0, 1, 1]));
-    solver.run(time_to_run, black_box([0, 0, 1, 0, 1]));
-    solver.run(time_to_run, black_box([0, 0, 1, 1, 0]));
-    solver.run(time_to_run, black_box([0, 0, 2, 0, 0]));
-    solver.run(time_to_run, black_box([0, 1, 0, 0, 1]));
-    solver.run(time_to_run, black_box([0, 1, 0, 1, 0]));
-    solver.run(time_to_run, black_box([0, 1, 1, 0, 0]));
-    solver.run(time_to_run, black_box([0, 0, 1, 1, 1]));
-    solver.run(time_to_run, black_box([0, 0, 2, 0, 1]));
-    solver.run(time_to_run, black_box([0, 0, 2, 1, 0]));
-    solver.run(time_to_run, black_box([0, 1, 0, 1, 1]));
-    solver.run(time_to_run, black_box([0, 1, 1, 0, 1]));
-    solver.run(time_to_run, black_box([0, 1, 1, 1, 0]));
-    solver.run(time_to_run, black_box([0, 1, 2, 0, 0]));
-    solver.run(time_to_run, black_box([0, 0, 2, 1, 1]));
-    solver.run(time_to_run, black_box([0, 1, 1, 1, 1]));
-    solver.run(time_to_run, black_box([0, 1, 2, 0, 1]));
-    solver.run(time_to_run, black_box([0, 1, 2, 1, 0]));
-    solver.run(time_to_run, black_box([0, 1, 2, 1, 1]));
+    Solver::<{ [T, F, F, F, F] }>::new().run();
+    Solver::<{ [F, T, F, F, F] }>::new().run();
+    Solver::<{ [F, F, F, T, F] }>::new().run();
+    Solver::<{ [F, F, F, F, T] }>::new().run();
+    Solver::<{ [T, T, F, F, F] }>::new().run();
+    Solver::<{ [T, F, F, T, F] }>::new().run();
+    Solver::<{ [F, T, F, T, F] }>::new().run();
+    Solver::<{ [F, F, T, T, F] }>::new().run();
+    Solver::<{ [T, F, F, F, T] }>::new().run();
+    Solver::<{ [F, T, F, F, T] }>::new().run();
+    Solver::<{ [F, F, F, T, T] }>::new().run();
+    Solver::<{ [T, T, F, T, F] }>::new().run();
+    Solver::<{ [T, F, T, T, F] }>::new().run();
+    Solver::<{ [F, T, T, T, F] }>::new().run();
+    Solver::<{ [T, T, F, F, T] }>::new().run();
+    Solver::<{ [T, F, F, T, T] }>::new().run();
+    Solver::<{ [F, T, F, T, T] }>::new().run();
+    Solver::<{ [F, F, T, T, T] }>::new().run();
+    Solver::<{ [T, T, T, T, F] }>::new().run();
+    Solver::<{ [T, T, F, T, T] }>::new().run();
+    Solver::<{ [T, F, T, T, T] }>::new().run();
+    Solver::<{ [F, T, T, T, T] }>::new().run();
+    Solver::<{ [T, T, T, T, T] }>::new().run();
 }

@@ -1,8 +1,8 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::{
     SIZE,
-    bit_board::{BitBoard, PlacedBitShips},
+    bit_board::{BitBoard, PlacedBitShips, count_ships_to_place},
     bit_iter::BitIter,
     board::{Board, Cell},
     board_counts::{BoardCounts, CellCounts},
@@ -10,12 +10,27 @@ use crate::{
 };
 use num_format::{Locale, ToFormattedString};
 
-pub struct Solver {
-    pub placed_bit_ships: &'static PlacedBitShips,
+pub const SHIP_COUNT: usize = 5;
+pub const SHIPS: [Ship; 5] = [
+    Ship::new(5),
+    Ship::new(4),
+    Ship::new(3),
+    Ship::new(3),
+    Ship::new(2),
+];
+
+pub struct Solver<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>
+where
+    [(); count_ships_to_place(SHOULD_PLACE_SHIP)]:,
+{
+    pub placed_bit_ships: PlacedBitShips<SHOULD_PLACE_SHIP>,
     pub current_board: Board,
 }
 
-impl Solver {
+impl<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]> Solver<SHOULD_PLACE_SHIP>
+where
+    [(); count_ships_to_place(SHOULD_PLACE_SHIP)]:,
+{
     pub fn new() -> Self {
         Solver {
             placed_bit_ships: PlacedBitShips::new(),
@@ -26,9 +41,9 @@ impl Solver {
     pub fn reset(&mut self) {
         self.current_board = Board::new();
     }
-    pub fn run(&self, time_to_run: Duration, ship_amounts: [u8; 5]) {
+    pub fn run(&self) {
         let start_time = Instant::now();
-        let board_counts = self.inner_loop(time_to_run, ship_amounts);
+        let board_counts = self.inner_loop();
 
         let (x, y) = self.get_best_water_cell(&board_counts);
 
@@ -61,25 +76,25 @@ impl Solver {
         let (x, y) = (max_index % SIZE, max_index / SIZE);
         (x, y)
     }
-    pub fn inner_loop(&self, _time_to_run: Duration, ship_counts: [u8; 5]) -> BoardCounts {
-        let bit_board = BitBoard::new(self.current_board);
+    #[rustfmt::skip]
+    pub fn inner_loop(&self) -> BoardCounts {
         let mut board_counts = BoardCounts::new();
-        step(
-            bit_board,
-            ship_counts,
-            &mut board_counts,
-            self.placed_bit_ships,
-        );
+
+        let bit_board =BitBoard::new(self.current_board);
+        step_summing(bit_board, &mut board_counts, &self.placed_bit_ships);
         board_counts
     }
 }
 
 #[inline(always)]
 fn step_inner<const INDEX: usize, const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>(
-    board: BitBoard,
+    board: BitBoard<SHOULD_PLACE_SHIP>,
     counts: &mut CellCounts,
-    placed_bit_ships: &PlacedBitShips,
-) -> u64 {
+    placed_bit_ships: &PlacedBitShips<SHOULD_PLACE_SHIP>,
+) -> u64
+where
+    [(); count_ships_to_place(SHOULD_PLACE_SHIP)]:,
+{
     if !SHOULD_PLACE_SHIP[INDEX] {
         return step_inner_dispatch::<INDEX, SHOULD_PLACE_SHIP>(board, counts, placed_bit_ships);
     }
@@ -136,10 +151,11 @@ fn step_inner_dispatch<
     const INDEX: usize,
     const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT],
 >(
-    board: BitBoard,
+    board: BitBoard<SHOULD_PLACE_SHIP>,
     counts: &mut CellCounts,
-    placed_bit_ships: &PlacedBitShips,
-) -> u64 {
+    placed_bit_ships: &PlacedBitShips<SHOULD_PLACE_SHIP>,
+) -> u64
+where [(); count_ships_to_place(SHOULD_PLACE_SHIP)]:{
     match INDEX {
         0 => step_inner::<1, SHOULD_PLACE_SHIP>(board,  counts, placed_bit_ships),
         1 => step_inner::<2, SHOULD_PLACE_SHIP>(board,  counts, placed_bit_ships),
@@ -174,10 +190,12 @@ const fn last_ship_to_place(should_place_ship: [bool; SHIP_COUNT]) -> Ship {
 
 #[inline(never)]
 pub fn step_summing<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>(
-    bit_board: BitBoard,
+    bit_board: BitBoard<SHOULD_PLACE_SHIP>,
     board_counts: &mut BoardCounts,
-    placed_bit_ships: &PlacedBitShips,
-) {
+    placed_bit_ships: &PlacedBitShips<SHOULD_PLACE_SHIP>,
+) where
+    [(); count_ships_to_place(SHOULD_PLACE_SHIP)]:,
+{
     let mut counts = CellCounts::new();
     let total_boards =
         step_inner::<0, { SHOULD_PLACE_SHIP }>(bit_board, &mut counts, placed_bit_ships);
@@ -193,56 +211,45 @@ pub fn step_summing<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>(
     board_counts.add_cell_counts(counts)
 }
 
-const SHIP_COUNT: usize = 5;
-// pub const SHIP_LENGTHS: [usize; 5] = [5, 4, 3, 3, 2];
-pub const SHIPS: [Ship; 5] = [
-    Ship::new(5),
-    Ship::new(4),
-    Ship::new(3),
-    Ship::new(3),
-    Ship::new(2),
-];
+// pub fn step<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>(
+//     bit_board: BitBoard<SHOULD_PLACE_SHIP>,
+//     ship_counts: [u8; 5],
+//     board_counts: &mut BoardCounts,
+//     placed_bit_ships: &PlacedBitShips<SHOULD_PLACE_SHIP>,
+// ) {
+//     println!("ship counts: {ship_counts:?}");
 
-#[rustfmt::skip]
-pub fn step(
-    bit_board: BitBoard,
-    ship_counts: [u8; 5],
-    board_counts: &mut BoardCounts,
-    placed_bit_ships: &PlacedBitShips,
-) {
-    println!("ship counts: {ship_counts:?}");
+//     const T: bool = true;
+//     const F: bool = false;
+//     match ship_counts {
+//         [_, 0, 0, 0, 1] => step_summing::<{ [T, F, F, F, F] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 0, 0, 1, 0] => step_summing::<{ [F, T, F, F, F] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 0, 1, 0, 0] => step_summing::<{ [F, F, F, T, F] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 1, 0, 0, 0] => step_summing::<{ [F, F, F, F, T] }>(bit_board, board_counts, placed_bit_ships),
 
-    const T: bool = true;
-    const F: bool = false;
-    match ship_counts {
-        [_, 0, 0, 0, 1] => step_summing::<{ [T, F, F, F, F] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 0, 0, 1, 0] => step_summing::<{ [F, T, F, F, F] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 0, 1, 0, 0] => step_summing::<{ [F, F, F, T, F] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 1, 0, 0, 0] => step_summing::<{ [F, F, F, F, T] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 0, 0, 1, 1] => step_summing::<{ [T, T, F, F, F] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 0, 1, 0, 1] => step_summing::<{ [T, F, F, T, F] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 0, 1, 1, 0] => step_summing::<{ [F, T, F, T, F] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 0, 2, 0, 0] => step_summing::<{ [F, F, T, T, F] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 1, 0, 0, 1] => step_summing::<{ [T, F, F, F, T] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 1, 0, 1, 0] => step_summing::<{ [F, T, F, F, T] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 1, 1, 0, 0] => step_summing::<{ [F, F, F, T, T] }>(bit_board, board_counts, placed_bit_ships),
 
-        [_, 0, 0, 1, 1] => step_summing::<{ [T, T, F, F, F] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 0, 1, 0, 1] => step_summing::<{ [T, F, F, T, F] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 0, 1, 1, 0] => step_summing::<{ [F, T, F, T, F] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 0, 2, 0, 0] => step_summing::<{ [F, F, T, T, F] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 1, 0, 0, 1] => step_summing::<{ [T, F, F, F, T] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 1, 0, 1, 0] => step_summing::<{ [F, T, F, F, T] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 1, 1, 0, 0] => step_summing::<{ [F, F, F, T, T] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 0, 1, 1, 1] => step_summing::<{ [T, T, F, T, F] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 0, 2, 0, 1] => step_summing::<{ [T, F, T, T, F] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 0, 2, 1, 0] => step_summing::<{ [F, T, T, T, F] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 1, 0, 1, 1] => step_summing::<{ [T, T, F, F, T] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 1, 1, 0, 1] => step_summing::<{ [T, F, F, T, T] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 1, 1, 1, 0] => step_summing::<{ [F, T, F, T, T] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 1, 2, 0, 0] => step_summing::<{ [F, F, T, T, T] }>(bit_board, board_counts, placed_bit_ships),
 
-        [_, 0, 1, 1, 1] => step_summing::<{ [T, T, F, T, F] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 0, 2, 0, 1] => step_summing::<{ [T, F, T, T, F] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 0, 2, 1, 0] => step_summing::<{ [F, T, T, T, F] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 1, 0, 1, 1] => step_summing::<{ [T, T, F, F, T] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 1, 1, 0, 1] => step_summing::<{ [T, F, F, T, T] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 1, 1, 1, 0] => step_summing::<{ [F, T, F, T, T] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 1, 2, 0, 0] => step_summing::<{ [F, F, T, T, T] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 0, 2, 1, 1] => step_summing::<{ [T, T, T, T, F] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 1, 1, 1, 1] => step_summing::<{ [T, T, F, T, T] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 1, 2, 0, 1] => step_summing::<{ [T, F, T, T, T] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 1, 2, 1, 0] => step_summing::<{ [F, T, T, T, T] }>(bit_board, board_counts, placed_bit_ships),
 
-        [_, 0, 2, 1, 1] => step_summing::<{ [T, T, T, T, F] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 1, 1, 1, 1] => step_summing::<{ [T, T, F, T, T] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 1, 2, 0, 1] => step_summing::<{ [T, F, T, T, T] }>(bit_board, board_counts, placed_bit_ships),
-        [_, 1, 2, 1, 0] => step_summing::<{ [F, T, T, T, T] }>(bit_board, board_counts, placed_bit_ships),
+//         [_, 1, 2, 1, 1] => step_summing::<{ [T, T, T, T, T] }>(bit_board, board_counts, placed_bit_ships),
 
-        [_, 1, 2, 1, 1] => step_summing::<{ [T, T, T, T, T] }>(bit_board, board_counts, placed_bit_ships),
-
-        rem => println!("Not implemented: {rem:?}"),
-    }
-}
+//         rem => println!("Not implemented: {rem:?}"),
+//     }
+// }
