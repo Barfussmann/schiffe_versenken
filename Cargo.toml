@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+colored = "3.0.0"
+colorgrad = "0.7.1"
 glam = "0.30.0"
 num-format = "0.4.4"
 

@@ -15,7 +15,7 @@
 // #![allow(dead_code, clippy::new_without_default, unused, incomplete_features)]
 // #![warn(clippy::pedantic)]
 mod board;
-use std::time::Duration;
+use std::{hint::black_box, time::Duration};
 
 use solver::Solver;
 
@@ -34,15 +34,38 @@ fn main() {
         .build_global()
         .unwrap();
 
-    let mut solver = Solver::new();
+    let solver = Solver::new();
     // let ship_amounts = std::hint::black_box([0, 0, 0, 0, 1]);
-    let ship_amounts = std::hint::black_box([0, 1, 2, 1, 1]);
     // let ship_amounts = std::hint::black_box([4, 3, 2, 1, 0]); // russian fleet
 
     let time_to_run = Duration::from_millis(1000);
-    loop {
-        solver.run(time_to_run, ship_amounts);
-        // println!("{}", solver.current_board);
-        solver.reset();
-    }
+    // loop {
+    //     solver.run(time_to_run, black_box([0, 1, 2, 1, 1]));
+    //     // println!("{}", solver.current_board);
+    //     solver.reset();
+    // }
+
+    solver.run(time_to_run, black_box([0, 0, 0, 0, 1]));
+    solver.run(time_to_run, black_box([0, 0, 0, 1, 0]));
+    solver.run(time_to_run, black_box([0, 0, 1, 0, 0]));
+    solver.run(time_to_run, black_box([0, 1, 0, 0, 0]));
+    solver.run(time_to_run, black_box([0, 0, 0, 1, 1]));
+    solver.run(time_to_run, black_box([0, 0, 1, 0, 1]));
+    solver.run(time_to_run, black_box([0, 0, 1, 1, 0]));
+    solver.run(time_to_run, black_box([0, 0, 2, 0, 0]));
+    solver.run(time_to_run, black_box([0, 1, 0, 0, 1]));
+    solver.run(time_to_run, black_box([0, 1, 0, 1, 0]));
+    solver.run(time_to_run, black_box([0, 1, 1, 0, 0]));
+    solver.run(time_to_run, black_box([0, 0, 1, 1, 1]));
+    solver.run(time_to_run, black_box([0, 0, 2, 0, 1]));
+    solver.run(time_to_run, black_box([0, 0, 2, 1, 0]));
+    solver.run(time_to_run, black_box([0, 1, 0, 1, 1]));
+    solver.run(time_to_run, black_box([0, 1, 1, 0, 1]));
+    solver.run(time_to_run, black_box([0, 1, 1, 1, 0]));
+    solver.run(time_to_run, black_box([0, 1, 2, 0, 0]));
+    solver.run(time_to_run, black_box([0, 0, 2, 1, 1]));
+    solver.run(time_to_run, black_box([0, 1, 1, 1, 1]));
+    solver.run(time_to_run, black_box([0, 1, 2, 0, 1]));
+    solver.run(time_to_run, black_box([0, 1, 2, 1, 0]));
+    solver.run(time_to_run, black_box([0, 1, 2, 1, 1]));
 }

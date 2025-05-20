@@ -5,12 +5,13 @@ use std::{
     mem::transmute,
     simd::{Mask, Swizzle, cmp::SimdPartialOrd, num::SimdUint},
 };
-use std::{simd::prelude::*, sync::LazyLock};
+use std::{cmp::Reverse, simd::prelude::*, sync::LazyLock};
 
 use crate::{
     SIZE,
     bit_iter::BitIter,
     board::{Board, Direction},
+    solver::SHIPS,
 };
 use crate::{board::Cell, ship::Ship};
 #[derive(Clone, Copy)]
@@ -19,20 +20,8 @@ pub struct BitBoard {
     pub protected_and_ship: [u64x8; 3],
 }
 impl BitBoard {
-    pub const INSTRUCTION_PARALLELISM: usize = 1;
     pub fn allowable<const SHIP_INDEX: usize>(&self) -> u64x4 {
-        match Ship::length_from_index(SHIP_INDEX) {
-            1 => simd_swizzle!(self.protected_and_ship[0], [2, 3, 2, 3]),
-            2 => simd_swizzle!(self.protected_and_ship[0], [4, 5, 6, 7]),
-            3 => simd_swizzle!(self.protected_and_ship[1], [0, 1, 2, 3]),
-            4 => simd_swizzle!(self.protected_and_ship[1], [4, 5, 6, 7]),
-            5 => simd_swizzle!(self.protected_and_ship[2], [0, 1, 2, 3]),
-            6 => simd_swizzle!(self.protected_and_ship[2], [4, 5, 6, 7]),
-            _ => unreachable!("Invalid ship length"),
-        }
-    }
-    pub fn allowable_dyn(&self, ship: Ship) -> u64x4 {
-        match ship.length() {
+        match Ship::from_index(SHIP_INDEX).length() {
             1 => simd_swizzle!(self.protected_and_ship[0], [2, 3, 2, 3]),
             2 => simd_swizzle!(self.protected_and_ship[0], [4, 5, 6, 7]),
             3 => simd_swizzle!(self.protected_and_ship[1], [0, 1, 2, 3]),
@@ -53,12 +42,12 @@ impl BitBoard {
 
         // let protected_1 = protected.to_u64x2(Cell::Protected);
 
-        let protected_1 = protected.shifted_protected::<{ Ship::new(1, 0) }>(); // x and y are the same so we only need one
-        let protected_2 = protected.shifted_protected::<{ Ship::new(2, 0) }>();
-        let protected_3 = protected.shifted_protected::<{ Ship::new(3, 0) }>();
-        let protected_4 = protected.shifted_protected::<{ Ship::new(4, 0) }>();
-        let protected_5 = protected.shifted_protected::<{ Ship::new(5, 0) }>();
-        let protected_6 = protected.shifted_protected::<{ Ship::new(6, 0) }>();
+        let protected_1 = protected.shifted_protected::<{ Ship::new(1) }>(); // x and y are the same so we only need one
+        let protected_2 = protected.shifted_protected::<{ Ship::new(2) }>();
+        let protected_3 = protected.shifted_protected::<{ Ship::new(3) }>();
+        let protected_4 = protected.shifted_protected::<{ Ship::new(4) }>();
+        let protected_5 = protected.shifted_protected::<{ Ship::new(5) }>();
+        let protected_6 = protected.shifted_protected::<{ Ship::new(6) }>();
 
         Self {
             protected_and_ship: [
@@ -86,7 +75,7 @@ impl BitBoard {
                 .get_unchecked(index as usize)
         };
         // we only need the ships that are shorter than the current ship
-        for i in 0..Ship::length_from_index(SHIP_INDEX).div_ceil(2) {
+        for i in 0..Ship::from_index(SHIP_INDEX).length().div_ceil(2) {
             this.protected_and_ship[i] &= placed_ship_board.protected_and_ship[i];
         }
         this
@@ -109,17 +98,9 @@ pub struct PlacedBitShips {
 }
 impl PlacedBitShips {
     pub fn new() -> &'static Self {
-        const SHIPS: [Ship; 5] = [
-            Ship::new(5, 0),
-            Ship::new(4, 0),
-            Ship::new(3, 0),
-            Ship::new(3, 0),
-            Ship::new(2, 0),
-        ];
-
         static PLACED_BIT_SHIPS: LazyLock<PlacedBitShips> = LazyLock::new(|| {
             assert!(
-                SHIPS.is_sorted_by_key(|ship| ship.index()),
+                SHIPS.is_sorted_by_key(|ship| Reverse(ship.length())),
                 "SHIPS has to be sorted by ship.index()"
             );
             let placed_ships = SHIPS.map(|ship| {

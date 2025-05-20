@@ -1,3 +1,6 @@
+use colored::Colorize;
+use colorgrad::Gradient;
+
 use crate::{
     bit_iter::ChunkedBitIter,
     board::{Board, Cell},
@@ -13,26 +16,45 @@ use core::{
 use std::{
     fmt::{Display, Write},
     iter::zip,
-    ops::Range,
+    ops::{Index, IndexMut},
     simd::prelude::*,
 };
 
+pub struct CellCounts {
+    counts_per_position: [ShipCounts; 6],
+}
+impl CellCounts {
+    pub fn new() -> Self {
+        Self {
+            counts_per_position: std::array::from_fn(|_| ShipCounts::new()),
+        }
+    }
+}
+impl Index<Ship> for CellCounts {
+    type Output = ShipCounts;
+
+    fn index(&self, index: Ship) -> &Self::Output {
+        &self.counts_per_position[index.length() - 1]
+    }
+}
+impl IndexMut<Ship> for CellCounts {
+    fn index_mut(&mut self, index: Ship) -> &mut Self::Output {
+        &mut self.counts_per_position[index.length() - 1]
+    }
+}
+
 #[derive(Debug, Clone)]
-pub struct ShipPositionCounts {
+pub struct ShipCounts {
     counts: [u64x64; 4],
-    added_boards: u64,
-    small_counts: [u8x64; 4],
     bit_counts: [u64x4; 8],
     bit_counts_total: [u64x4; 32],
     added_bit_fields: usize,
     bit_fields_to_sum: [u64x4; 256],
 }
-impl ShipPositionCounts {
-    pub fn new() -> ShipPositionCounts {
-        ShipPositionCounts {
+impl ShipCounts {
+    pub fn new() -> ShipCounts {
+        ShipCounts {
             counts: [u64x64::splat(0); 4],
-            added_boards: 0,
-            small_counts: [u8x64::splat(0); 4],
             bit_counts: [u64x4::splat(0); 8],
             bit_counts_total: [u64x4::splat(0); 32],
             added_bit_fields: 0,
@@ -57,38 +79,30 @@ impl ShipPositionCounts {
         let rem_index = index as usize % 64;
         self.counts[u64_index][rem_index] += counts;
     }
-    #[rustfmt::skip]
     pub fn sum_single_bits(&mut self) {
-
-        // unsafe {
-        //     self.bit_fields_to_sum.get_unchecked_mut(self.added_bit_fields..self.added_bit_fields.next_multiple_of(8)).fill(u64x4::splat(0));
-        // }
-        // self.bit_fields_to_sum[self.added_bit_fields..self.added_bit_fields.next_multiple_of(8)].fill(u64x4::splat(0));
-        // self.bit_fields_to_sum[self.added_bit_fields..self.added_bit_fields.next_multiple_of(8)].fill(u64x4::splat(0));
         for i in self.added_bit_fields..self.added_bit_fields.next_multiple_of(8) {
             unsafe {
                 *self.bit_fields_to_sum.get_unchecked_mut(i) = u64x4::splat(0);
             }
         }
-        for chunk in self.bit_fields_to_sum.array_chunks::<8>().take(self.added_bit_fields.div_ceil(8)) {
-
-            let a_3 = bit_adder(bit_adder([chunk[0]], [chunk[1]]), bit_adder([chunk[2]], [chunk[3]]));
-            let b_3 = bit_adder(bit_adder([chunk[4]], [chunk[5]]), bit_adder([chunk[6]], [chunk[7]]));
+        for chunk in self
+            .bit_fields_to_sum
+            .array_chunks::<8>()
+            .take(self.added_bit_fields.div_ceil(8))
+        {
+            let a_3 = bit_adder(
+                bit_adder([chunk[0]], [chunk[1]]),
+                bit_adder([chunk[2]], [chunk[3]]),
+            );
+            let b_3 = bit_adder(
+                bit_adder([chunk[4]], [chunk[5]]),
+                bit_adder([chunk[6]], [chunk[7]]),
+            );
 
             let mut a_4 = bit_adder(a_3, b_3);
 
             bit_adder_in_place(&mut self.bit_counts, &mut a_4);
-            // let bit_counts = self.bit_counts;
-            // self.bit_counts.copy_from_slice(&bit_adder([a_4[0], a_4[1], a_4[2], a_4[3], u64x4::splat(0), u64x4::splat(0), u64x4::splat(0), u64x4::splat(0)], bit_counts)[..8]);
         }
-        // for i in 0..self.added_bit_fields {
-        //     let mut carry = self.bit_fields_to_sum[i];
-        //     for bit_index in 0..8 {
-        //         let next_carry = self.bit_counts[bit_index] & carry;
-        //         self.bit_counts[bit_index] ^= carry;
-        //         carry = next_carry;
-        //     }
-        // }
         self.added_bit_fields = 0;
     }
     // #[inline(never)]
@@ -244,10 +258,7 @@ impl BoardCounts {
         self.board_count += 1;
     }
     #[inline(never)]
-    pub fn add_ship_positions_counts<const SHIP: Ship>(
-        &mut self,
-        ship_counts: &mut ShipPositionCounts,
-    ) {
+    pub fn add_ship_positions_counts<const SHIP: Ship>(&mut self, ship_counts: &mut ShipCounts) {
         ship_counts.sum_bit_counts();
         let counts = ship_counts.counts();
         for i in 0..100 {
@@ -260,13 +271,44 @@ impl BoardCounts {
                 }
             }
         }
-        *ship_counts = ShipPositionCounts::new();
+        *ship_counts = ShipCounts::new();
     }
-    pub fn add_other_count(&mut self, other: Self) {
+    pub fn add(mut self, other: Self) -> Self {
         for (self_count, other_count) in zip(&mut self.counts, &other.counts) {
             *self_count += *other_count;
         }
         self.board_count += other.board_count;
+        self
+    }
+    pub fn add_cell_counts(&mut self, mut cell_counts: CellCounts) {
+        self.add_ship_positions_counts::<{ Ship::new(5) }>(&mut cell_counts[Ship::new(5)]);
+        self.add_ship_positions_counts::<{ Ship::new(4) }>(&mut cell_counts[Ship::new(4)]);
+        self.add_ship_positions_counts::<{ Ship::new(3) }>(&mut cell_counts[Ship::new(3)]);
+        self.add_ship_positions_counts::<{ Ship::new(2) }>(&mut cell_counts[Ship::new(2)]);
+    }
+    pub fn print_colorfull(&self) {
+        println!();
+
+        let max_val = *self.counts.iter().max().unwrap() as f32;
+
+        let color_grad = colorgrad::preset::rd_yl_gn();
+
+        for row in self.counts.chunks(SIZE).take(SIZE) {
+            for count in row {
+                let probability = *count as f32 / (self.board_count as f32);
+
+                let color_scale = *count as f32 / max_val;
+
+                let rgba8 = color_grad.at(color_scale).to_rgba8();
+
+                let colored_string = format_args!("{:3.0}", probability * 1000.)
+                    .to_string()
+                    .on_truecolor(rgba8[0], rgba8[1], rgba8[2])
+                    .black();
+                print!("{colored_string} ");
+            }
+            println!();
+        }
     }
 }
 
@@ -275,10 +317,9 @@ impl Display for BoardCounts {
         f.write_char('\n')?;
         for row in self.counts.chunks(SIZE).take(SIZE) {
             for count in row {
-                let probability = (*count as f64) / (self.board_count as f64);
-
-                f.write_fmt(format_args!("{:4.1} ", probability * 100.))?;
-                // f.write_fmt(format_args!("{:3.1} ", probability * 100.))?;
+                let counts = *count as f32;
+                let probability = counts / (self.board_count as f32);
+                f.write_fmt(format_args!("{:3.1} ", probability * 100.))?;
             }
             f.write_char('\n')?;
         }
