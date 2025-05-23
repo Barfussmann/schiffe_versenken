@@ -1,5 +1,6 @@
 use core::simd::u64x4;
 use std::cmp::Reverse;
+use std::iter::zip;
 
 use crate::ship::Ship;
 use crate::{
@@ -19,8 +20,8 @@ pub const fn count_ships_to_place(should_place_ship: [bool; SHIP_COUNT]) -> usiz
     }
     count
 }
-#[derive(Clone, Copy)]
-#[repr(align(256))]
+#[derive(Debug, Clone, Copy)]
+// #[repr(align(256))]
 pub struct BitBoard<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>
 where
     [(); count_ships_to_place(SHOULD_PLACE_SHIP)]:,
@@ -40,18 +41,7 @@ where
                 count += 1;
             }
         }
-        // println!("count: {count}, index: {SHIP_INDEX}, should_place: {SHOULD_PLACE_SHIP:?}");
         self.protected[count]
-
-        // match Ship::from_index(SHIP_INDEX).length() {
-        //     1 => simd_swizzle!(self.protected_and_ship[0], [2, 3, 2, 3]),
-        //     2 => simd_swizzle!(self.protected_and_ship[0], [4, 5, 6, 7]),
-        //     3 => simd_swizzle!(self.protected_and_ship[1], [0, 1, 2, 3]),
-        //     4 => simd_swizzle!(self.protected_and_ship[1], [4, 5, 6, 7]),
-        //     5 => simd_swizzle!(self.protected_and_ship[2], [0, 1, 2, 3]),
-        //     6 => simd_swizzle!(self.protected_and_ship[2], [4, 5, 6, 7]),
-        //     _ => unreachable!("Invalid ship length"),
-        // }
     }
     pub fn new(board: Board) -> Self {
         let protected = board.to_protected();
@@ -69,48 +59,35 @@ where
             .collect();
 
         Self {
-            // protected_and_ship: [
-            //     simd_swizzle!(
-            //         u64x4::from_array([ship[0], ship[1], protected_1[0], protected_1[1]]),
-            //         protected_2,
-            //         [0, 1, 2, 3, 4, 5, 6, 7]
-            //     ),
-            //     simd_swizzle!(protected_3, protected_4, [0, 1, 2, 3, 4, 5, 6, 7]),
-            //     simd_swizzle!(protected_5, protected_6, [0, 1, 2, 3, 4, 5, 6, 7]),
-            // ],
             protected: protected.try_into().unwrap(),
         }
     }
     #[must_use]
     pub fn place_ship<const SHIP_INDEX: usize>(
-        self,
+        mut self,
         index: u8,
         placed_bit_ships: &PlacedBitShips<SHOULD_PLACE_SHIP>,
     ) -> Self {
-        let mut this = self;
+        let ship_index = const { ship_count_to_ship_index(SHIP_INDEX, SHOULD_PLACE_SHIP) };
         let placed_ship_board = unsafe {
             placed_bit_ships
                 .placed_ships
-                .get_unchecked(SHIP_INDEX)
+                .get_unchecked(ship_index)
                 .get_unchecked(index as usize)
         };
 
         // we only need the ships that are shorter than the current ship
-        let remaining_ships = const { ship_count_from_ship_index(SHIP_INDEX, SHOULD_PLACE_SHIP) };
+        let remaining_ships = const { ship_count_to_ship_index(SHIP_INDEX, SHOULD_PLACE_SHIP) };
 
-        for i in remaining_ships..this.protected.len() {
-            this.protected[i] &= placed_ship_board.protected[i];
+        for i in remaining_ships..self.protected.len() {
+            self.protected[i] &= placed_ship_board.protected[i];
         }
 
-        // we only need the ships that are shorter than the current ship
-        // for i in 0..Ship::from_index(SHIP_INDEX).length().div_ceil(2) {
-        //     this.protected_and_ship[i] &= placed_ship_board.protected_and_ship[i];
-        // }
-        this
+        self
     }
 }
 
-const fn ship_count_from_ship_index(
+pub const fn ship_count_to_ship_index(
     ship_index: usize,
     should_place_ship: [bool; SHIP_COUNT],
 ) -> usize {
@@ -129,7 +106,7 @@ pub struct PlacedBitShips<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>
 where
     [(); count_ships_to_place(SHOULD_PLACE_SHIP)]:,
 {
-    pub placed_ships: [[BitBoard<SHOULD_PLACE_SHIP>; 256]; 5],
+    pub placed_ships: [[BitBoard<SHOULD_PLACE_SHIP>; 256]; count_ships_to_place(SHOULD_PLACE_SHIP)],
 }
 impl<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]> PlacedBitShips<SHOULD_PLACE_SHIP>
 where
@@ -140,21 +117,26 @@ where
             SHIPS.is_sorted_by_key(|ship| Reverse(ship.length())),
             "SHIPS has to be sorted by ship.index()"
         );
-        let placed_ships = SHIPS.map(|ship| {
-            let mut placed_ships = [BitBoard::new(Board::new()); 256];
-            for dir in [Direction::Horizontal, Direction::Vertical] {
-                for y in 0..SIZE {
-                    for x in 0..SIZE {
-                        let bit_board_index = dir as usize * 128 + (y * 10 + x);
-                        let mut board = Board::new();
-                        board.const_place_ship(x, y, dir, ship);
+        let placed_ships = zip(SHIPS, SHOULD_PLACE_SHIP)
+            .filter(|(_, should_place)| *should_place)
+            .map(|(ship, _)| {
+                let mut placed_ships = [BitBoard::new(Board::new()); 256];
+                for dir in [Direction::Horizontal, Direction::Vertical] {
+                    for y in 0..SIZE {
+                        for x in 0..SIZE {
+                            let bit_board_index = dir as usize * 128 + (y * 10 + x);
+                            let mut board = Board::new();
+                            board.const_place_ship(x, y, dir, ship);
 
-                        placed_ships[bit_board_index] = BitBoard::new(board);
+                            placed_ships[bit_board_index] = BitBoard::new(board);
+                        }
                     }
                 }
-            }
-            placed_ships
-        });
-        PlacedBitShips { placed_ships }
+                placed_ships
+            })
+            .collect::<Vec<_>>();
+        PlacedBitShips {
+            placed_ships: placed_ships.try_into().unwrap(),
+        }
     }
 }

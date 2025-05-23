@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use crate::{
     SIZE,
-    bit_board::{BitBoard, PlacedBitShips, count_ships_to_place},
+    bit_board::{BitBoard, PlacedBitShips, count_ships_to_place, ship_count_to_ship_index},
     bit_iter::BitIter,
     board::{Board, Cell},
     board_counts::{BoardCounts, CellCounts},
@@ -89,7 +89,7 @@ where
 #[inline(always)]
 fn step_inner<const INDEX: usize, const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>(
     board: BitBoard<SHOULD_PLACE_SHIP>,
-    counts: &mut CellCounts,
+    counts: &mut CellCounts<SHOULD_PLACE_SHIP>,
     placed_bit_ships: &PlacedBitShips<SHOULD_PLACE_SHIP>,
 ) -> u64
 where
@@ -99,10 +99,11 @@ where
         return step_inner_dispatch::<INDEX, SHOULD_PLACE_SHIP>(board, counts, placed_bit_ships);
     }
 
+    let already_placed_ships = const { ship_count_to_ship_index(INDEX, SHOULD_PLACE_SHIP) };
     // directly add the the positions of all possible placements of the last ship
     if const { remaining_ships_test(INDEX, SHOULD_PLACE_SHIP) } == 1 {
-        let possible_ship_positions =
-            counts[SHIPS[INDEX]].add_possible_ship_positions(board.allowable::<INDEX>());
+        let possible_ship_positions = counts.counts_per_position[already_placed_ships]
+            .add_possible_ship_positions(board.allowable::<INDEX>());
         return possible_ship_positions;
     }
 
@@ -133,15 +134,14 @@ where
         let additional_configurations =
             step_inner_dispatch::<INDEX, SHOULD_PLACE_SHIP>(board, counts, placed_bit_ships);
         // addes the currently placed ship with the amount of differnt configurations
-        counts[SHIPS[INDEX]].add_single_ship(ship_pos, additional_configurations);
+        counts.counts_per_position[already_placed_ships]
+            .add_single_ship(ship_pos, additional_configurations);
 
         configurations += additional_configurations;
     }
     // flush the small count with the u8 to the big u64 nums to prevent overflow
     if const { remaining_ships_test(INDEX, SHOULD_PLACE_SHIP) } == 2 {
-        counts[const { last_ship_to_place(SHOULD_PLACE_SHIP) }].sum_single_bits();
-        counts[const { last_ship_to_place(SHOULD_PLACE_SHIP) }]
-            .sum_bit_counts_to_total_bit_counts();
+        counts.sum_last_ship();
     }
     configurations
 }
@@ -152,7 +152,7 @@ fn step_inner_dispatch<
     const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT],
 >(
     board: BitBoard<SHOULD_PLACE_SHIP>,
-    counts: &mut CellCounts,
+    counts: &mut CellCounts<SHOULD_PLACE_SHIP>,
     placed_bit_ships: &PlacedBitShips<SHOULD_PLACE_SHIP>,
 ) -> u64
 where [(); count_ships_to_place(SHOULD_PLACE_SHIP)]:{
@@ -202,9 +202,7 @@ pub fn step_summing<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>(
 
     // checks if only one ship is placed and sums the last placed ship. It otherwise only happens when placing atleast two ships.
     if SHOULD_PLACE_SHIP.iter().filter(|x| **x).count() == 1 {
-        counts[const { last_ship_to_place(SHOULD_PLACE_SHIP) }].sum_single_bits();
-        counts[const { last_ship_to_place(SHOULD_PLACE_SHIP) }]
-            .sum_bit_counts_to_total_bit_counts();
+        counts.sum_last_ship();
     }
 
     board_counts.board_count += total_boards;

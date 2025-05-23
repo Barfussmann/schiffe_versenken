@@ -2,9 +2,11 @@ use colored::Colorize;
 use colorgrad::Gradient;
 
 use crate::{
+    bit_board::count_ships_to_place,
     bit_iter::ChunkedBitIter,
     board::{Board, Cell},
     ship::Ship,
+    solver::{SHIP_COUNT, SHIPS},
 };
 
 use super::BOARD_SIZE;
@@ -16,30 +18,28 @@ use core::{
 use std::{
     fmt::{Display, Write},
     iter::zip,
-    ops::{Index, IndexMut},
     simd::prelude::*,
 };
 
-pub struct CellCounts {
-    counts_per_position: [ShipCounts; 6],
+pub struct CellCounts<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>
+where
+    [(); count_ships_to_place(SHOULD_PLACE_SHIP)]:,
+{
+    pub counts_per_position: [ShipCounts; count_ships_to_place(SHOULD_PLACE_SHIP)],
 }
-impl CellCounts {
+impl<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]> CellCounts<SHOULD_PLACE_SHIP>
+where
+    [(); count_ships_to_place(SHOULD_PLACE_SHIP)]:,
+{
     pub fn new() -> Self {
         Self {
             counts_per_position: std::array::from_fn(|_| ShipCounts::new()),
         }
     }
-}
-impl Index<Ship> for CellCounts {
-    type Output = ShipCounts;
-
-    fn index(&self, index: Ship) -> &Self::Output {
-        &self.counts_per_position[index.length() - 1]
-    }
-}
-impl IndexMut<Ship> for CellCounts {
-    fn index_mut(&mut self, index: Ship) -> &mut Self::Output {
-        &mut self.counts_per_position[index.length() - 1]
+    pub fn sum_last_ship(&mut self) {
+        let ship_counts = self.counts_per_position.last_mut().unwrap();
+        ship_counts.sum_single_bits();
+        ship_counts.sum_bit_counts_to_total_bit_counts();
     }
 }
 
@@ -258,13 +258,13 @@ impl BoardCounts {
         self.board_count += 1;
     }
     #[inline(never)]
-    pub fn add_ship_positions_counts<const SHIP: Ship>(&mut self, ship_counts: &mut ShipCounts) {
+    pub fn add_ship_positions_counts(&mut self, ship: Ship, ship_counts: &mut ShipCounts) {
         ship_counts.sum_bit_counts();
         let counts = ship_counts.counts();
         for i in 0..100 {
             let ship_count_x = counts[i];
             let ship_count_y = counts[i + 128];
-            for ship_i in 0..SHIP.length() {
+            for ship_i in 0..ship.length() {
                 self.counts[i + ship_i] += ship_count_x;
                 if i + ship_i * 10 < 128 {
                     self.counts[i + ship_i * 10] += ship_count_y;
@@ -280,11 +280,22 @@ impl BoardCounts {
         self.board_count += other.board_count;
         self
     }
-    pub fn add_cell_counts(&mut self, mut cell_counts: CellCounts) {
-        self.add_ship_positions_counts::<{ Ship::new(5) }>(&mut cell_counts[Ship::new(5)]);
-        self.add_ship_positions_counts::<{ Ship::new(4) }>(&mut cell_counts[Ship::new(4)]);
-        self.add_ship_positions_counts::<{ Ship::new(3) }>(&mut cell_counts[Ship::new(3)]);
-        self.add_ship_positions_counts::<{ Ship::new(2) }>(&mut cell_counts[Ship::new(2)]);
+    pub fn add_cell_counts<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>(
+        &mut self,
+        mut cell_counts: CellCounts<SHOULD_PLACE_SHIP>,
+    ) where
+        [(); count_ships_to_place(SHOULD_PLACE_SHIP)]:,
+    {
+        let mut cell_counts_index = 0;
+        for (ship, was_used) in zip(SHIPS, SHOULD_PLACE_SHIP) {
+            if was_used {
+                self.add_ship_positions_counts(
+                    ship,
+                    &mut cell_counts.counts_per_position[cell_counts_index],
+                );
+                cell_counts_index += 1;
+            }
+        }
     }
     pub fn print_colorfull(&self) {
         println!();
