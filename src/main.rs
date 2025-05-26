@@ -1,6 +1,7 @@
 #![feature(
     portable_simd,
     adt_const_params,
+    int_roundings,
     generic_const_exprs,
     stdarch_x86_avx512,
     iter_array_chunks,
@@ -16,6 +17,7 @@
 // #![warn(clippy::pedantic)]
 mod board;
 
+use board::Board;
 use ship::ShipCounts;
 use solver::Solver;
 
@@ -62,6 +64,6 @@ fn main() {
 
     // Solver::<5>::new(ShipCounts::new([1, 1, 2, 1])).run();
     for _ in 0..10 {
-        Solver::<5>::new(ShipCounts::new([1, 1, 2, 1])).run();
+        Solver::<5>::new(ShipCounts::new([1, 1, 2, 1]), Board::new()).run();
     }
 }

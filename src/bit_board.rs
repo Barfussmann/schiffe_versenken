@@ -7,9 +7,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy)]
-// #[repr(align(256))]
 pub struct BitBoard<const N: usize> {
-    // pub protected_and_ship: [u64x8; 3],
     protected: [u64x4; N],
 }
 impl<const N: usize> BitBoard<N> {
@@ -49,11 +47,8 @@ impl<const N: usize> BitBoard<N> {
         };
 
         // we only need the ships that are shorter than the current ship
-        // let remaining_ships = const { N - SHIP_INDEX };
 
-        // ToDo mabey change the remaining ships to remaining_ships - 1
-
-        for i in SHIP_INDEX..self.protected.len() {
+        for i in SHIP_INDEX + 1..self.protected.len() {
             self.protected[i] &= placed_ship_board.protected[i];
         }
 

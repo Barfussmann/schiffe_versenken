@@ -19,8 +19,7 @@ pub struct Solver<const N: usize> {
 }
 
 impl<const N: usize> Solver<N> {
-    pub fn new(ship_counts: ShipCounts) -> Self {
-        let board = Board::new();
+    pub fn new(ship_counts: ShipCounts, board: Board) -> Self {
         Solver {
             placed_bit_ships: PlacedBitShips::new(ship_counts),
             current_board: board,
@@ -78,10 +77,8 @@ impl<const N: usize> Solver<N> {
     fn place_ship_recursive<const INDEX: usize>(&mut self, board: BitBoard<N>) -> u64 {
         // directly add the the positions of all possible placements of the last ship
         if INDEX + 1 == N {
-            let possible_ship_positions =
-                self.board_counts.ship_cell_counts.counts_per_ship_position[INDEX]
-                    .add_possible_ship_positions(board.allowable::<INDEX>());
-            return possible_ship_positions;
+            return self.board_counts.ship_cell_counts.counts_per_ship_position[INDEX]
+                .add_possible_ship_positions(board.allowable::<INDEX>());
         }
 
         let mut configurations = 0;
@@ -103,7 +100,7 @@ impl<const N: usize> Solver<N> {
             configurations += additional_configurations;
         }
 
-        // flush the small count with the u8 to the big u64 nums to prevent overflow
+        // flush the cell counts to prevent overflow
         if INDEX + 2 == N {
             self.board_counts.ship_cell_counts.sum_last_ship();
         }
