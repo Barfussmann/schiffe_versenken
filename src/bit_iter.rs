@@ -20,8 +20,7 @@ impl Iterator for ChunkedBitIter {
     type Item = [u8; Self::CHUNK_SIZE];
 
     // #[inline(never)]
-    #[allow(arithmetic_overflow)]
-    fn next(&mut self) -> core::prelude::v1::Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Item> {
         loop {
             if self.current_u64.trailing_zeros() == 64 {
                 if self.offset == 64 * 3 {

@@ -1,5 +1,6 @@
 use colored::Colorize;
 use colorgrad::Gradient;
+use crunchy::unroll;
 
 use crate::{
     board::{Board, Cell},
@@ -70,24 +71,31 @@ impl CellCount {
     }
     #[inline(never)]
     pub fn sum_single_bits(&mut self) {
-        while self.added_bit_fields > 256 {
-            const BIT_FIELD_CHUNKS: usize = 63;
-            if self.added_bit_fields < BIT_FIELD_CHUNKS {
-                return;
-            }
-            let start_index = self.added_bit_fields - BIT_FIELD_CHUNKS;
-            let bit_fields_to_sum: &[u64x4; BIT_FIELD_CHUNKS] = self.bit_fields_to_sum
-                [start_index..self.added_bit_fields]
-                .first_chunk::<BIT_FIELD_CHUNKS>()
-                .unwrap();
-
-            bit_sum_test_3(bit_fields_to_sum, [(); 1]);
-
-            let sum = bit_sum_test_2(bit_fields_to_sum);
-            bit_adder_in_place(&mut self.bit_counts_total, &sum);
-
-            self.added_bit_fields -= BIT_FIELD_CHUNKS;
+        const BIT_FIELD_CHUNKS: usize = 255;
+        // const BIT_FIELD_CHUNKS: usize = 63;
+        if self.added_bit_fields < BIT_FIELD_CHUNKS {
+            return;
         }
+        let start_index = self.added_bit_fields - BIT_FIELD_CHUNKS;
+        let bit_fields_to_sum: &[u64x4; BIT_FIELD_CHUNKS] = self.bit_fields_to_sum
+            [start_index..self.added_bit_fields]
+            .first_chunk::<BIT_FIELD_CHUNKS>()
+            .unwrap();
+
+        // let mut sum_low = [u64x4::splat(0); 6];
+
+        // sum_test(bit_fields_to_sum, &mut sum_low);
+        // black_box(sum_low);
+        // let sum = bit_sum_test_2(bit_fields_to_sum);
+        // black_box(sum);
+
+        // sum_test(bit_fields_to_sum, &mut sum_low);
+        // bit_adder_in_place(&mut self.bit_counts_total, &sum_low);
+
+        let sum = bit_sum_test_3(bit_fields_to_sum);
+        bit_adder_in_place(&mut self.bit_counts_total, &sum);
+
+        self.added_bit_fields -= BIT_FIELD_CHUNKS;
     }
     // #[inline(never)]
     pub fn sum_bit_counts_to_total_bit_counts(&mut self) {
@@ -161,6 +169,7 @@ fn bit_sum_test(val: &[u64x4; 15]) -> [u64x4; 4] {
     let f = bit_adder_with_carry(c, d, val[14]);
     bit_adder_with_carry(e, f, val[7])
 }
+#[inline(always)]
 fn bit_sum_test_2(val: &[u64x4; 63]) -> [u64x4; 6] {
     let a = bit_sum_test(val[0..15].try_into().unwrap());
     let b = bit_sum_test(val[16..16 + 15].try_into().unwrap());
@@ -170,14 +179,58 @@ fn bit_sum_test_2(val: &[u64x4; 63]) -> [u64x4; 6] {
     let f = bit_adder_with_carry(c, d, val[15 + 32]);
     bit_adder_with_carry(e, f, val[31])
 }
-fn bit_sum_test_3<const N: usize>(val: &[u64x4], _n: [(); N]) -> [u64x4; N + 1] {
-    let middle = N / 2;
-    let a = bit_sum_test_3(val[0..middle].try_into().unwrap(), [(); N]);
-    let b = bit_sum_test_3(val[middle..middle * 2].try_into().unwrap(), [(); N]);
-    let carry = *val.get(middle * 2).unwrap_or(&u64x4::splat(0));
-
-    bit_adder_with_carry(a, b, carry)
+fn bit_sum_test_3(val: &[u64x4; 255]) -> [u64x4; 8] {
+    let a = bit_sum_test_2(val[0..63].try_into().unwrap());
+    let b = bit_sum_test_2(val[64..64 + 63].try_into().unwrap());
+    let e = bit_adder_with_carry(a, b, val[63]);
+    let c = bit_sum_test_2(val[128..128 + 63].try_into().unwrap());
+    let d = bit_sum_test_2(val[192..192 + 63].try_into().unwrap());
+    let f = bit_adder_with_carry(c, d, val[63 + 128]);
+    bit_adder_with_carry(e, f, val[63 + 64])
 }
+
+fn sum_test(vals: &[u64x4; 255], sum_low: &mut [u64x4; 6]) {
+    let mut sum_high = [u64x4::splat(0); 6];
+    unroll! {
+        for i in 0..255 {
+            let mut carry = vals[i];
+
+            let n = i + 1;
+            let is_low_carry = n.count_ones() == n.trailing_ones();
+            let bits_to_sum = n.trailing_ones() as usize - is_low_carry as usize;
+            // dbg!(i);
+            for sum_i in 0..bits_to_sum {
+                // dbg!(sum_i);
+                unsafe {
+                    carry = single_add_with_carry(
+                        sum_low.get_unchecked_mut(sum_i),
+                        sum_high.get_unchecked_mut(sum_i),
+                        carry,
+                    )
+                }
+            }
+            unsafe {
+                if is_low_carry {
+                    *sum_low.get_unchecked_mut(bits_to_sum) = carry;
+                } else {
+                    *sum_high.get_unchecked_mut(bits_to_sum) = carry;
+                }
+            }
+        }
+    }
+}
+fn single_add(a: &mut u64x4, carry: u64x4) -> u64x4 {
+    let new_carry = *a & carry;
+    *a ^= carry;
+    new_carry
+}
+fn single_add_with_carry(a: &mut u64x4, b: &u64x4, carry: u64x4) -> u64x4 {
+    let res = *a ^ b ^ carry;
+    let new_carry = (*a & b) | (carry & (*a ^ b));
+    *a = res;
+    new_carry
+}
+
 fn bit_sum<const N: usize, const M: usize>(
     vals_to_sum: &[[u64x4; N]; M],
 ) -> [[u64x4; N + 1]; M / 2] {

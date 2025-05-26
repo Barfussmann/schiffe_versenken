@@ -36,34 +36,34 @@ fn main() {
         .build_global()
         .unwrap();
 
-    // Solver::<1>::new(ShipCounts::new([1, 0, 0, 0])).run();
-    // Solver::<1>::new(ShipCounts::new([0, 1, 0, 0])).run();
-    // Solver::<1>::new(ShipCounts::new([0, 0, 1, 0])).run();
-    // Solver::<1>::new(ShipCounts::new([0, 0, 0, 1])).run();
+    // Solver::<1>::new(ShipCounts::new([1, 0, 0, 0]), Board::new()).run();
+    // Solver::<1>::new(ShipCounts::new([0, 1, 0, 0]), Board::new()).run();
+    // Solver::<1>::new(ShipCounts::new([0, 0, 1, 0]), Board::new()).run();
+    // Solver::<1>::new(ShipCounts::new([0, 0, 0, 1]), Board::new()).run();
 
-    // Solver::<2>::new(ShipCounts::new([1, 1, 0, 0])).run();
-    // Solver::<2>::new(ShipCounts::new([1, 0, 1, 0])).run();
-    // Solver::<2>::new(ShipCounts::new([0, 1, 1, 0])).run();
-    // Solver::<2>::new(ShipCounts::new([0, 0, 2, 0])).run();
-    // Solver::<2>::new(ShipCounts::new([1, 0, 0, 1])).run();
-    // Solver::<2>::new(ShipCounts::new([0, 1, 0, 1])).run();
-    // Solver::<2>::new(ShipCounts::new([0, 0, 1, 1])).run();
+    // Solver::<2>::new(ShipCounts::new([1, 1, 0, 0]), Board::new()).run();
+    // Solver::<2>::new(ShipCounts::new([1, 0, 1, 0]), Board::new()).run();
+    // Solver::<2>::new(ShipCounts::new([0, 1, 1, 0]), Board::new()).run();
+    // Solver::<2>::new(ShipCounts::new([0, 0, 2, 0]), Board::new()).run();
+    // Solver::<2>::new(ShipCounts::new([1, 0, 0, 1]), Board::new()).run();
+    // Solver::<2>::new(ShipCounts::new([0, 1, 0, 1]), Board::new()).run();
+    // Solver::<2>::new(ShipCounts::new([0, 0, 1, 1]), Board::new()).run();
 
-    // Solver::<3>::new(ShipCounts::new([1, 1, 1, 0])).run();
-    // Solver::<3>::new(ShipCounts::new([1, 0, 2, 0])).run();
-    // Solver::<3>::new(ShipCounts::new([0, 1, 2, 0])).run();
-    // Solver::<3>::new(ShipCounts::new([1, 1, 0, 1])).run();
-    // Solver::<3>::new(ShipCounts::new([1, 0, 1, 1])).run();
-    // Solver::<3>::new(ShipCounts::new([0, 1, 1, 1])).run();
-    // Solver::<3>::new(ShipCounts::new([0, 0, 2, 1])).run();
+    // Solver::<3>::new(ShipCounts::new([1, 1, 1, 0]), Board::new()).run();
+    // Solver::<3>::new(ShipCounts::new([1, 0, 2, 0]), Board::new()).run();
+    // Solver::<3>::new(ShipCounts::new([0, 1, 2, 0]), Board::new()).run();
+    // Solver::<3>::new(ShipCounts::new([1, 1, 0, 1]), Board::new()).run();
+    // Solver::<3>::new(ShipCounts::new([1, 0, 1, 1]), Board::new()).run();
+    // Solver::<3>::new(ShipCounts::new([0, 1, 1, 1]), Board::new()).run();
+    // Solver::<3>::new(ShipCounts::new([0, 0, 2, 1]), Board::new()).run();
 
-    // Solver::<4>::new(ShipCounts::new([1, 1, 2, 0])).run();
-    // Solver::<4>::new(ShipCounts::new([1, 1, 1, 1])).run();
-    // Solver::<4>::new(ShipCounts::new([1, 0, 2, 1])).run();
-    // Solver::<4>::new(ShipCounts::new([0, 1, 2, 1])).run();
+    // Solver::<4>::new(ShipCounts::new([1, 1, 2, 0]), Board::new()).run();
+    // Solver::<4>::new(ShipCounts::new([1, 1, 1, 1]), Board::new()).run();
+    // Solver::<4>::new(ShipCounts::new([1, 0, 2, 1]), Board::new()).run();
+    // Solver::<4>::new(ShipCounts::new([0, 1, 2, 1]), Board::new()).run();
 
-    // Solver::<5>::new(ShipCounts::new([1, 1, 2, 1])).run();
-    for _ in 0..10 {
+    // Solver::<5>::new(ShipCounts::new([1, 1, 2, 1]), Board::new()).run();
+    for _ in 0..100 {
         Solver::<5>::new(ShipCounts::new([1, 1, 2, 1]), Board::new()).run();
     }
 }
