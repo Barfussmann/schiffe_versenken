@@ -1,4 +1,5 @@
-use crate::ship::Ship;
+use crate::bit_board::BitBoard;
+use crate::ship::{Ship, ShipCounts};
 use crate::{BOARD_SIZE, SIZE};
 use glam::{IVec2, ivec2};
 
@@ -262,6 +263,9 @@ impl Board {
                 f(&mut self.cells[Self::cell_index(x as usize, y as usize)])
             }
         }
+    }
+    pub fn to_bitboard<const N: usize>(self, ship_counts: ShipCounts) -> BitBoard<N> {
+        BitBoard::new(self, ship_counts)
     }
 }
 

@@ -1,6 +1,31 @@
 use std::marker::ConstParamTy;
 
-use crate::solver::SHIPS;
+pub const SHIPS: [Ship; 4] = [Ship::new(5), Ship::new(4), Ship::new(3), Ship::new(2)];
+
+#[derive(Clone, Copy)]
+pub struct ShipCounts {
+    counts: [usize; 4],
+}
+impl ShipCounts {
+    pub fn new(counts: [usize; 4]) -> Self {
+        assert!(counts[0] <= 1);
+        assert!(counts[1] <= 1);
+        assert!(counts[2] <= 2);
+        assert!(counts[3] <= 1);
+        Self { counts }
+    }
+    pub fn counts(&self) -> [usize; 4] {
+        self.counts
+    }
+    pub fn iter_ships(&self) -> impl Iterator<Item = Ship> {
+        self.counts
+            .iter()
+            .enumerate()
+            .flat_map(|(ship_index, ship_count)| {
+                std::iter::repeat_n(unsafe { *SHIPS.get_unchecked(ship_index) }, *ship_count)
+            })
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ConstParamTy)]
 pub enum ShipLength {

@@ -16,6 +16,7 @@
 // #![warn(clippy::pedantic)]
 mod board;
 
+use ship::ShipCounts;
 use solver::Solver;
 
 const SIZE: usize = 10;
@@ -33,32 +34,34 @@ fn main() {
         .build_global()
         .unwrap();
 
-    const SHOULD_PLACE_SHIP: [bool; 5] = [true; 5];
+    // Solver::<1>::new(ShipCounts::new([1, 0, 0, 0])).run();
+    // Solver::<1>::new(ShipCounts::new([0, 1, 0, 0])).run();
+    // Solver::<1>::new(ShipCounts::new([0, 0, 1, 0])).run();
+    // Solver::<1>::new(ShipCounts::new([0, 0, 0, 1])).run();
 
-    const F: bool = false;
-    const T: bool = true;
+    // Solver::<2>::new(ShipCounts::new([1, 1, 0, 0])).run();
+    // Solver::<2>::new(ShipCounts::new([1, 0, 1, 0])).run();
+    // Solver::<2>::new(ShipCounts::new([0, 1, 1, 0])).run();
+    // Solver::<2>::new(ShipCounts::new([0, 0, 2, 0])).run();
+    // Solver::<2>::new(ShipCounts::new([1, 0, 0, 1])).run();
+    // Solver::<2>::new(ShipCounts::new([0, 1, 0, 1])).run();
+    // Solver::<2>::new(ShipCounts::new([0, 0, 1, 1])).run();
 
-    Solver::<{ [T, F, F, F, F] }>::new().run();
-    Solver::<{ [F, T, F, F, F] }>::new().run();
-    Solver::<{ [F, F, F, T, F] }>::new().run();
-    Solver::<{ [F, F, F, F, T] }>::new().run();
-    Solver::<{ [T, T, F, F, F] }>::new().run();
-    Solver::<{ [T, F, F, T, F] }>::new().run();
-    Solver::<{ [F, T, F, T, F] }>::new().run();
-    Solver::<{ [F, F, T, T, F] }>::new().run();
-    Solver::<{ [T, F, F, F, T] }>::new().run();
-    Solver::<{ [F, T, F, F, T] }>::new().run();
-    Solver::<{ [F, F, F, T, T] }>::new().run();
-    Solver::<{ [T, T, F, T, F] }>::new().run();
-    Solver::<{ [T, F, T, T, F] }>::new().run();
-    Solver::<{ [F, T, T, T, F] }>::new().run();
-    Solver::<{ [T, T, F, F, T] }>::new().run();
-    Solver::<{ [T, F, F, T, T] }>::new().run();
-    Solver::<{ [F, T, F, T, T] }>::new().run();
-    Solver::<{ [F, F, T, T, T] }>::new().run();
-    Solver::<{ [T, T, T, T, F] }>::new().run();
-    Solver::<{ [T, T, F, T, T] }>::new().run();
-    Solver::<{ [T, F, T, T, T] }>::new().run();
-    Solver::<{ [F, T, T, T, T] }>::new().run();
-    Solver::<{ [T, T, T, T, T] }>::new().run();
+    // Solver::<3>::new(ShipCounts::new([1, 1, 1, 0])).run();
+    // Solver::<3>::new(ShipCounts::new([1, 0, 2, 0])).run();
+    // Solver::<3>::new(ShipCounts::new([0, 1, 2, 0])).run();
+    // Solver::<3>::new(ShipCounts::new([1, 1, 0, 1])).run();
+    // Solver::<3>::new(ShipCounts::new([1, 0, 1, 1])).run();
+    // Solver::<3>::new(ShipCounts::new([0, 1, 1, 1])).run();
+    // Solver::<3>::new(ShipCounts::new([0, 0, 2, 1])).run();
+
+    // Solver::<4>::new(ShipCounts::new([1, 1, 2, 0])).run();
+    // Solver::<4>::new(ShipCounts::new([1, 1, 1, 1])).run();
+    // Solver::<4>::new(ShipCounts::new([1, 0, 2, 1])).run();
+    // Solver::<4>::new(ShipCounts::new([0, 1, 2, 1])).run();
+
+    // Solver::<5>::new(ShipCounts::new([1, 1, 2, 1])).run();
+    for _ in 0..10 {
+        Solver::<5>::new(ShipCounts::new([1, 1, 2, 1])).run();
+    }
 }

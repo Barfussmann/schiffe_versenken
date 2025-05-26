@@ -2,11 +2,9 @@ use colored::Colorize;
 use colorgrad::Gradient;
 
 use crate::{
-    bit_board::count_ships_to_place,
     bit_iter::ChunkedBitIter,
     board::{Board, Cell},
-    ship::Ship,
-    solver::{SHIP_COUNT, SHIPS},
+    ship::ShipCounts,
 };
 
 use super::BOARD_SIZE;
@@ -21,40 +19,36 @@ use std::{
     simd::prelude::*,
 };
 
-pub struct CellCounts<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>
-where
-    [(); count_ships_to_place(SHOULD_PLACE_SHIP)]:,
-{
-    pub counts_per_position: [ShipCounts; count_ships_to_place(SHOULD_PLACE_SHIP)],
+#[derive(Debug, Clone)]
+pub struct ShipCellCounts<const N: usize> {
+    pub counts_per_ship_position: [CellCount; N],
 }
-impl<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]> CellCounts<SHOULD_PLACE_SHIP>
-where
-    [(); count_ships_to_place(SHOULD_PLACE_SHIP)]:,
-{
+impl<const N: usize> ShipCellCounts<N> {
     pub fn new() -> Self {
         Self {
-            counts_per_position: std::array::from_fn(|_| ShipCounts::new()),
+            counts_per_ship_position: std::array::from_fn(|_| CellCount::new()),
         }
     }
+    #[inline(never)]
     pub fn sum_last_ship(&mut self) {
-        let ship_counts = self.counts_per_position.last_mut().unwrap();
+        let ship_counts = self.counts_per_ship_position.last_mut().unwrap();
         ship_counts.sum_single_bits();
         ship_counts.sum_bit_counts_to_total_bit_counts();
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ShipCounts {
-    counts: [u64x64; 4],
+pub struct CellCount {
+    position_counts: [u64x64; 4],
     bit_counts: [u64x4; 8],
     bit_counts_total: [u64x4; 32],
     added_bit_fields: usize,
     bit_fields_to_sum: [u64x4; 256],
 }
-impl ShipCounts {
-    pub fn new() -> ShipCounts {
-        ShipCounts {
-            counts: [u64x64::splat(0); 4],
+impl CellCount {
+    pub fn new() -> CellCount {
+        CellCount {
+            position_counts: [u64x64::splat(0); 4],
             bit_counts: [u64x4::splat(0); 8],
             bit_counts_total: [u64x4::splat(0); 32],
             added_bit_fields: 0,
@@ -62,12 +56,7 @@ impl ShipCounts {
         }
     }
     fn counts(&self) -> [u64; 256] {
-        // let mut counts = [0; 256];
-        // for i in 0..256 {
-        //     counts[i] = self.counts[i].reduce_sum() + self.counts_bits[i / 64][i % 64];
-        // }
-        // counts
-        self.counts
+        self.position_counts
             .map(|x| x.to_array())
             .as_flattened()
             .try_into()
@@ -77,7 +66,7 @@ impl ShipCounts {
         // self.counts[index as usize] += counts;
         let u64_index = index as usize / 64;
         let rem_index = index as usize % 64;
-        self.counts[u64_index][rem_index] += counts;
+        self.position_counts[u64_index][rem_index] += counts;
     }
     pub fn sum_single_bits(&mut self) {
         for i in self.added_bit_fields..self.added_bit_fields.next_multiple_of(8) {
@@ -114,7 +103,7 @@ impl ShipCounts {
         for bit_index in 0..8 {
             let mul = 2usize.pow(bit_index as u32);
             for i in 0..4 {
-                self.counts[i] -= mask8x64::from_bitmask(self.bit_counts[bit_index][i])
+                self.position_counts[i] -= mask8x64::from_bitmask(self.bit_counts[bit_index][i])
                     .to_int()
                     .cast()
                     * u64x64::splat(mul as u64);
@@ -124,10 +113,11 @@ impl ShipCounts {
         for bit_index in 0..self.bit_counts_total.len() {
             let mul = 2usize.pow(bit_index as u32);
             for i in 0..4 {
-                self.counts[i] -= mask8x64::from_bitmask(self.bit_counts_total[bit_index][i])
-                    .to_int()
-                    .cast()
-                    * u64x64::splat(mul as u64);
+                self.position_counts[i] -=
+                    mask8x64::from_bitmask(self.bit_counts_total[bit_index][i])
+                        .to_int()
+                        .cast()
+                        * u64x64::splat(mul as u64);
             }
             self.bit_counts_total[bit_index] = u64x4::splat(0);
         }
@@ -234,16 +224,18 @@ fn bit_adder<const N: usize>(a: [u64x4; N], b: [u64x4; N]) -> [u64x4; N + 1] {
 }
 
 #[derive(Debug, Clone)]
-pub struct BoardCounts {
+pub struct BoardCounts<const N: usize> {
     pub counts: [u64; BOARD_SIZE],
     pub board_count: u64,
+    pub ship_cell_counts: ShipCellCounts<N>,
 }
 
-impl BoardCounts {
-    pub fn new() -> BoardCounts {
+impl<const N: usize> BoardCounts<N> {
+    pub fn new() -> Self {
         BoardCounts {
             counts: [0; BOARD_SIZE],
             board_count: 0,
+            ship_cell_counts: ShipCellCounts::new(),
         }
     }
     pub fn add_board(&mut self, board: Board) {
@@ -257,22 +249,6 @@ impl BoardCounts {
         }
         self.board_count += 1;
     }
-    #[inline(never)]
-    pub fn add_ship_positions_counts(&mut self, ship: Ship, ship_counts: &mut ShipCounts) {
-        ship_counts.sum_bit_counts();
-        let counts = ship_counts.counts();
-        for i in 0..100 {
-            let ship_count_x = counts[i];
-            let ship_count_y = counts[i + 128];
-            for ship_i in 0..ship.length() {
-                self.counts[i + ship_i] += ship_count_x;
-                if i + ship_i * 10 < 128 {
-                    self.counts[i + ship_i * 10] += ship_count_y;
-                }
-            }
-        }
-        *ship_counts = ShipCounts::new();
-    }
     pub fn add(mut self, other: Self) -> Self {
         for (self_count, other_count) in zip(&mut self.counts, &other.counts) {
             *self_count += *other_count;
@@ -280,21 +256,26 @@ impl BoardCounts {
         self.board_count += other.board_count;
         self
     }
-    pub fn add_cell_counts<const SHOULD_PLACE_SHIP: [bool; SHIP_COUNT]>(
-        &mut self,
-        mut cell_counts: CellCounts<SHOULD_PLACE_SHIP>,
-    ) where
-        [(); count_ships_to_place(SHOULD_PLACE_SHIP)]:,
-    {
-        let mut cell_counts_index = 0;
-        for (ship, was_used) in zip(SHIPS, SHOULD_PLACE_SHIP) {
-            if was_used {
-                self.add_ship_positions_counts(
-                    ship,
-                    &mut cell_counts.counts_per_position[cell_counts_index],
-                );
-                cell_counts_index += 1;
+    #[inline(never)]
+    pub fn sum_cell_counts(&mut self, ship_counts: ShipCounts) {
+        self.ship_cell_counts.sum_last_ship();
+        for (ship, cell_counts) in zip(
+            ship_counts.iter_ships(),
+            &mut self.ship_cell_counts.counts_per_ship_position,
+        ) {
+            cell_counts.sum_bit_counts();
+            let counts = cell_counts.counts();
+            for i in 0..100 {
+                let ship_count_x = counts[i];
+                let ship_count_y = counts[i + 128];
+                for ship_i in 0..ship.length() {
+                    self.counts[i + ship_i] += ship_count_x;
+                    if i + ship_i * 10 < 128 {
+                        self.counts[i + ship_i * 10] += ship_count_y;
+                    }
+                }
             }
+            *cell_counts = CellCount::new();
         }
     }
     pub fn print_colorfull(&self) {
@@ -323,7 +304,7 @@ impl BoardCounts {
     }
 }
 
-impl Display for BoardCounts {
+impl<const N: usize> Display for BoardCounts<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_char('\n')?;
         for row in self.counts.chunks(SIZE).take(SIZE) {
