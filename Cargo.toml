@@ -6,8 +6,8 @@ edition = "2024"
 [dependencies]
 colored = "3.0.0"
 colorgrad = "0.7.1"
-crunchy = { version = "0.2.3", features = ["limit_256"], default-features = false }
 glam = "0.30.0"
+loop-code = "0.5.2"
 num-format = "0.4.4"
 
 rayon = "1.10.0"

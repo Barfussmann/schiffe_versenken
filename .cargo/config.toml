@@ -1,6 +1,6 @@
 [build]
-# rustflags = ["-C", "target-cpu=native"]
 rustflags = ["-C", "target-cpu=native"]
+# rustflags = ["-C", "target-cpu=native", "-Z", "threads=8"]
 [unstable]
 # build-std = ["std"]
 # build-std = ["std", "panic_abort"]

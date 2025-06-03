@@ -5,7 +5,8 @@
     generic_const_exprs,
     stdarch_x86_avx512,
     iter_array_chunks,
-    array_chunks
+    array_chunks,
+    vec_push_within_capacity
 )]
 #![allow(
     dead_code,
@@ -63,7 +64,7 @@ fn main() {
     // Solver::<4>::new(ShipCounts::new([0, 1, 2, 1]), Board::new()).run();
 
     // Solver::<5>::new(ShipCounts::new([1, 1, 2, 1]), Board::new()).run();
-    for _ in 0..100 {
+    for _ in 0..10 {
         Solver::<5>::new(ShipCounts::new([1, 1, 2, 1]), Board::new()).run();
     }
 }

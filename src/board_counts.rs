@@ -1,6 +1,6 @@
 use colored::Colorize;
 use colorgrad::Gradient;
-use crunchy::unroll;
+use loop_code::repeat;
 
 use crate::{
     board::{Board, Cell},
@@ -29,12 +29,11 @@ impl<const N: usize> ShipCellCounts<N> {
             counts_per_ship_position: std::array::from_fn(|_| CellCount::new()),
         }
     }
-    #[inline(never)]
-    pub fn sum_last_ship(&mut self) {
+    pub fn sum_last_ship<const COUNT: usize>(&mut self) {
         self.counts_per_ship_position
             .last_mut()
             .unwrap()
-            .sum_single_bits();
+            .sum_single_bits::<COUNT>();
     }
 }
 
@@ -42,9 +41,9 @@ impl<const N: usize> ShipCellCounts<N> {
 pub struct CellCount {
     position_counts: [u64x64; 4],
     bit_counts: [u64x4; 8],
-    bit_counts_total: [u64x4; 32],
+    pub bit_counts_total: [u64x4; 32],
     added_bit_fields: usize,
-    bit_fields_to_sum: [u64x4; 512],
+    pub bit_fields_to_sum: [u64x4; 512],
 }
 impl CellCount {
     pub fn new() -> CellCount {
@@ -69,33 +68,16 @@ impl CellCount {
         let rem_index = index as usize % 64;
         self.position_counts[u64_index][rem_index] += counts;
     }
-    #[inline(never)]
-    pub fn sum_single_bits(&mut self) {
-        const BIT_FIELD_CHUNKS: usize = 255;
-        // const BIT_FIELD_CHUNKS: usize = 63;
-        if self.added_bit_fields < BIT_FIELD_CHUNKS {
-            return;
-        }
-        let start_index = self.added_bit_fields - BIT_FIELD_CHUNKS;
-        let bit_fields_to_sum: &[u64x4; BIT_FIELD_CHUNKS] = self.bit_fields_to_sum
-            [start_index..self.added_bit_fields]
-            .first_chunk::<BIT_FIELD_CHUNKS>()
-            .unwrap();
+    // #[inline(never)]
+    pub fn sum_single_bits<const COUNT: usize>(&mut self) {
+        let bit_fields_to_sum: &[u64x4; 127] =
+            self.bit_fields_to_sum[0..127].first_chunk::<127>().unwrap();
 
-        // let mut sum_low = [u64x4::splat(0); 6];
-
-        // sum_test(bit_fields_to_sum, &mut sum_low);
-        // black_box(sum_low);
-        // let sum = bit_sum_test_2(bit_fields_to_sum);
-        // black_box(sum);
-
-        // sum_test(bit_fields_to_sum, &mut sum_low);
-        // bit_adder_in_place(&mut self.bit_counts_total, &sum_low);
-
-        let sum = bit_sum_test_3(bit_fields_to_sum);
+        let sum = bit_sum_fn_6::<COUNT>(bit_fields_to_sum, 0);
+        // let sum = bit_sum_6(bit_fields_to_sum);
         bit_adder_in_place(&mut self.bit_counts_total, &sum);
 
-        self.added_bit_fields -= BIT_FIELD_CHUNKS;
+        self.added_bit_fields = 0;
     }
     // #[inline(never)]
     pub fn sum_bit_counts_to_total_bit_counts(&mut self) {
@@ -134,17 +116,11 @@ impl CellCount {
         }
         self.added_bit_fields += 1;
 
-        let mut added_ships = 0;
-        for i in 0..4 {
-            // added_ships += 17;
-            added_ships += ship_positions[i].count_ones() as u64;
-            // dbg!(ship_positions[i].count_ones() as u64);
-        }
-        added_ships
+        ship_positions.count_ones().reduce_sum()
     }
 }
 
-fn bit_adder_in_place<const N: usize, const M: usize>(vals: &mut [u64x4; N], b: &[u64x4; M]) {
+pub fn bit_adder_in_place<const N: usize, const M: usize>(vals: &mut [u64x4; N], b: &[u64x4; M]) {
     let mut carry = u64x4::splat(0);
     assert!(M <= N);
     for i in 0..M {
@@ -160,104 +136,143 @@ fn bit_adder_in_place<const N: usize, const M: usize>(vals: &mut [u64x4; N], b: 
     }
 }
 
-fn bit_sum_test(val: &[u64x4; 15]) -> [u64x4; 4] {
-    let a = bit_adder_with_carry([val[0]], [val[1]], val[2]);
-    let b = bit_adder_with_carry([val[3]], [val[4]], val[5]);
-    let e = bit_adder_with_carry(a, b, val[6]);
-    let c = bit_adder_with_carry([val[8]], [val[9]], val[10]);
-    let d = bit_adder_with_carry([val[11]], [val[12]], val[13]);
-    let f = bit_adder_with_carry(c, d, val[14]);
-    bit_adder_with_carry(e, f, val[7])
+#[inline(always)]
+#[rustfmt::skip]
+fn bit_sum_fn_1<const N: usize>(vals: &[u64x4; 127], index: usize) -> [u64x4; 2] {
+    let mut new_vals = [u64x4::splat(0); 3];
+    if index     < N { new_vals[0] = vals[index    ] }
+    if index + 1 < N { new_vals[1] = vals[index + 1] }
+    if index + 2 < N { new_vals[2] = vals[index + 2] }
+
+    bit_adder_with_carry([new_vals[0]], [new_vals[1]], new_vals[2])
 }
 #[inline(always)]
-fn bit_sum_test_2(val: &[u64x4; 63]) -> [u64x4; 6] {
-    let a = bit_sum_test(val[0..15].try_into().unwrap());
-    let b = bit_sum_test(val[16..16 + 15].try_into().unwrap());
-    let e = bit_adder_with_carry(a, b, val[15]);
-    let c = bit_sum_test(val[32..32 + 15].try_into().unwrap());
-    let d = bit_sum_test(val[48..48 + 15].try_into().unwrap());
-    let f = bit_adder_with_carry(c, d, val[15 + 32]);
-    bit_adder_with_carry(e, f, val[31])
+fn bit_sum_fn_2<const N: usize>(vals: &[u64x4; 127], index: usize) -> [u64x4; 3] {
+    let a = bit_sum_fn_1::<N>(vals, index);
+    let b = bit_sum_fn_1::<N>(vals, index + 3);
+    let carry = if index + 6 < N {
+        vals[index + 6]
+    } else {
+        u64x4::splat(0)
+    };
+    bit_adder_with_carry(a, b, carry)
 }
-fn bit_sum_test_3(val: &[u64x4; 255]) -> [u64x4; 8] {
-    let a = bit_sum_test_2(val[0..63].try_into().unwrap());
-    let b = bit_sum_test_2(val[64..64 + 63].try_into().unwrap());
-    let e = bit_adder_with_carry(a, b, val[63]);
-    let c = bit_sum_test_2(val[128..128 + 63].try_into().unwrap());
-    let d = bit_sum_test_2(val[192..192 + 63].try_into().unwrap());
-    let f = bit_adder_with_carry(c, d, val[63 + 128]);
-    bit_adder_with_carry(e, f, val[63 + 64])
+#[inline(always)]
+fn bit_sum_fn_3<const N: usize>(vals: &[u64x4; 127], index: usize) -> [u64x4; 4] {
+    let a = bit_sum_fn_2::<N>(vals, index);
+    let b = bit_sum_fn_2::<N>(vals, index + 7);
+    let carry = if index + 14 < N {
+        vals[index + 14]
+    } else {
+        u64x4::splat(0)
+    };
+
+    bit_adder_with_carry(a, b, carry)
 }
+#[inline(always)]
+fn bit_sum_fn_4<const N: usize>(vals: &[u64x4; 127], index: usize) -> [u64x4; 5] {
+    let a = bit_sum_fn_3::<N>(vals, index);
+    let b = bit_sum_fn_3::<N>(vals, index + 15);
+    let carry = if index + 30 < N {
+        vals[index + 30]
+    } else {
+        u64x4::splat(0)
+    };
 
-fn sum_test(vals: &[u64x4; 255], sum_low: &mut [u64x4; 6]) {
-    let mut sum_high = [u64x4::splat(0); 6];
-    unroll! {
-        for i in 0..255 {
-            let mut carry = vals[i];
-
-            let n = i + 1;
-            let is_low_carry = n.count_ones() == n.trailing_ones();
-            let bits_to_sum = n.trailing_ones() as usize - is_low_carry as usize;
-            // dbg!(i);
-            for sum_i in 0..bits_to_sum {
-                // dbg!(sum_i);
-                unsafe {
-                    carry = single_add_with_carry(
-                        sum_low.get_unchecked_mut(sum_i),
-                        sum_high.get_unchecked_mut(sum_i),
-                        carry,
-                    )
-                }
-            }
-            unsafe {
-                if is_low_carry {
-                    *sum_low.get_unchecked_mut(bits_to_sum) = carry;
-                } else {
-                    *sum_high.get_unchecked_mut(bits_to_sum) = carry;
-                }
-            }
+    bit_adder_with_carry(a, b, carry)
+}
+#[inline(always)]
+fn bit_sum_fn_5<const N: usize>(vals: &[u64x4; 127], index: usize) -> [u64x4; 6] {
+    let a = bit_sum_fn_4::<N>(vals, index);
+    let b = bit_sum_fn_4::<N>(vals, index + 31);
+    let carry = if index + 62 < N {
+        vals[index + 62]
+    } else {
+        u64x4::splat(0)
+    };
+    bit_adder_with_carry(a, b, carry)
+}
+#[inline(never)]
+fn bit_sum_fn_6<const N: usize>(vals: &[u64x4; 127], index: usize) -> [u64x4; 7] {
+    let a = bit_sum_fn_5::<N>(vals, index);
+    let b = bit_sum_fn_5::<N>(vals, index + 63);
+    let carry = if index + 126 < N {
+        vals[index + 126]
+    } else {
+        u64x4::splat(0)
+    };
+    bit_adder_with_carry(a, b, carry)
+}
+#[inline(always)]
+fn bit_sum_fn_7<const N: usize>(vals: &[u64x4; 127], index: usize) -> [u64x4; 8] {
+    let a = bit_sum_fn_6::<N>(vals, index);
+    let b = bit_sum_fn_6::<N>(vals, index + 127);
+    let carry = if index + 254 < N {
+        vals[index + 254]
+    } else {
+        u64x4::splat(0)
+    };
+    bit_adder_with_carry(a, b, carry)
+}
+#[inline(never)]
+pub fn bit_sum_fn_dyn(count: usize, vals: &[u64x4; 127]) -> [u64x4; 7] {
+    repeat!(INDEX 100 {
+        if count == INDEX {
+            return bit_sum_fn_6::<INDEX>(vals, 0);
+            // return bit_sum_fn_7::<INDEX>(0, fun);
         }
-    }
-}
-fn single_add(a: &mut u64x4, carry: u64x4) -> u64x4 {
-    let new_carry = *a & carry;
-    *a ^= carry;
-    new_carry
-}
-fn single_add_with_carry(a: &mut u64x4, b: &u64x4, carry: u64x4) -> u64x4 {
-    let res = *a ^ b ^ carry;
-    let new_carry = (*a & b) | (carry & (*a ^ b));
-    *a = res;
-    new_carry
+    });
+    unreachable!()
 }
 
-fn bit_sum<const N: usize, const M: usize>(
-    vals_to_sum: &[[u64x4; N]; M],
-) -> [[u64x4; N + 1]; M / 2] {
-    assert!(const { M.is_power_of_two() });
-    let mut res = [[u64x4::splat(0); N + 1]; M / 2];
-    for ([a, b], res) in zip(vals_to_sum.array_chunks::<2>(), &mut res) {
-        *res = bit_adder(*a, *b)
-    }
-    res
+#[inline(always)]
+fn bit_sum_1(vals: &[u64x4; 3]) -> [u64x4; 2] {
+    bit_adder_with_carry([vals[0]], [vals[1]], vals[2])
 }
+
+#[inline(always)]
+fn bit_sum_2(vals: &[u64x4; 7]) -> [u64x4; 3] {
+    let a = bit_sum_1(vals[0..3].try_into().unwrap());
+    let b = bit_sum_1(vals[3..6].try_into().unwrap());
+    bit_adder_with_carry(a, b, vals[6])
+}
+#[inline(always)]
+fn bit_sum_3(vals: &[u64x4; 15]) -> [u64x4; 4] {
+    let a = bit_sum_2(vals[0..7].try_into().unwrap());
+    let b = bit_sum_2(vals[7..14].try_into().unwrap());
+    bit_adder_with_carry(a, b, vals[14])
+}
+#[inline(always)]
+fn bit_sum_4(vals: &[u64x4; 31]) -> [u64x4; 5] {
+    let a = bit_sum_3(vals[0..15].try_into().unwrap());
+    let b = bit_sum_3(vals[15..30].try_into().unwrap());
+    bit_adder_with_carry(a, b, vals[30])
+}
+#[inline(always)]
+fn bit_sum_5(vals: &[u64x4; 63]) -> [u64x4; 6] {
+    let a = bit_sum_4(vals[0..31].try_into().unwrap());
+    let b = bit_sum_4(vals[31..62].try_into().unwrap());
+    bit_adder_with_carry(a, b, vals[62])
+}
+#[inline(always)]
+fn bit_sum_6(vals: &[u64x4; 127]) -> [u64x4; 7] {
+    let a = bit_sum_5(vals[0..63].try_into().unwrap());
+    let b = bit_sum_5(vals[63..126].try_into().unwrap());
+    bit_adder_with_carry(a, b, vals[126])
+}
+#[inline(always)]
+fn bit_sum_7(vals: &[u64x4; 255]) -> [u64x4; 8] {
+    let a = bit_sum_6(vals[0..127].try_into().unwrap());
+    let b = bit_sum_6(vals[127..254].try_into().unwrap());
+    bit_adder_with_carry(a, b, vals[254])
+}
+
 fn bit_adder_with_carry<const N: usize>(
     a: [u64x4; N],
     b: [u64x4; N],
     mut carry: u64x4,
 ) -> [u64x4; N + 1] {
     let mut res = [u64x4::splat(0); N + 1];
-
-    for i in 0..N {
-        res[i] = a[i] ^ b[i] ^ carry;
-        carry = (a[i] & b[i]) | (carry & (a[i] ^ b[i]))
-    }
-    res[N] = carry;
-    res
-}
-fn bit_adder<const N: usize>(a: [u64x4; N], b: [u64x4; N]) -> [u64x4; N + 1] {
-    let mut res = [u64x4::splat(0); N + 1];
-    let mut carry = u64x4::splat(0);
 
     for i in 0..N {
         res[i] = a[i] ^ b[i] ^ carry;
@@ -302,7 +317,6 @@ impl<const N: usize> BoardCounts<N> {
     }
     #[inline(never)]
     pub fn sum_cell_counts(&mut self, ship_counts: ShipCounts) {
-        self.ship_cell_counts.sum_last_ship();
         for (ship, cell_counts) in zip(
             ship_counts.iter_ships(),
             &mut self.ship_cell_counts.counts_per_ship_position,

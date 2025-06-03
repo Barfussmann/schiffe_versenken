@@ -8,7 +8,7 @@ use crate::{
 
 #[derive(Debug, Clone, Copy)]
 pub struct BitBoard<const N: usize> {
-    protected: [u64x4; N],
+    pub protected: [u64x4; N],
 }
 impl<const N: usize> BitBoard<N> {
     pub fn allowable<const SHIP_INDEX: usize>(&self) -> u64x4 {
