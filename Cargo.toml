@@ -4,10 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-colored = "3.0.0"
-colorgrad = "0.7.1"
-crunchy = { version = "0.2.3", features = ["limit_256"], default-features = false }
-glam = "0.30.0"
+colored = { version = "3.0.0", default-features = false }
+colorgrad = { version = "0.7.1", default-features = false, features = ["preset"] }
+glam = { version = "0.30.0", default-features = false, features = ["std"] }
 num-format = "0.4.4"
 
 rayon = "1.10.0"

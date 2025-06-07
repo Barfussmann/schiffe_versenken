@@ -77,8 +77,12 @@ impl<const N: usize> Solver<N> {
     fn place_ship_recursive<const INDEX: usize>(&mut self, board: BitBoard<N>) -> u64 {
         // directly add the the positions of all possible placements of the last ship
         if INDEX + 1 == N {
-            return self.board_counts.ship_cell_counts.counts_per_ship_position[INDEX]
+            return self
+                .board_counts
+                .ship_cell_counts
                 .add_possible_ship_positions(board.allowable::<INDEX>());
+            // return self.board_counts.ship_cell_counts.counts_per_ship_position[INDEX]
+            //     .add_possible_ship_positions(board.allowable::<INDEX>());
         }
 
         let mut configurations = 0;
