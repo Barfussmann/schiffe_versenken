@@ -109,6 +109,7 @@ dependencies = [
 name = "schiffe_versenken"
 version = "0.1.0"
 dependencies = [
+ "arrayvec",
  "colored",
  "colorgrad",
  "glam",

@@ -4,12 +4,15 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+arrayvec = { version = "0.7.6", default-features = false }
 colored = { version = "3.0.0", default-features = false }
-colorgrad = { version = "0.7.1", default-features = false, features = ["preset"] }
+colorgrad = { version = "0.7.1", default-features = false, features = [
+    "preset",
+] }
 glam = { version = "0.30.0", default-features = false, features = ["std"] }
-num-format = "0.4.4"
+num-format = { version = "0.4.4", default-features = false, features = ["std"] }
 
-rayon = "1.10.0"
+rayon = { version = "1.10.0", default-features = false }
 
 
 [profile.release]

@@ -5,7 +5,11 @@
     generic_const_exprs,
     stdarch_x86_avx512,
     iter_array_chunks,
-    array_chunks
+    array_chunks,
+    vec_push_within_capacity,
+    iter_from_coroutine,
+    yield_expr,
+    coroutines
 )]
 #![allow(
     dead_code,

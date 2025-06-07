@@ -2,6 +2,7 @@ use crate::{
     board::{Board, Cell},
     ship::ShipCounts,
 };
+use arrayvec::ArrayVec;
 use colored::Colorize;
 use colorgrad::Gradient;
 
@@ -24,8 +25,7 @@ pub struct ShipCellCounts<const N: usize> {
 
     bit_counts: [u64x4; 8],
     bit_counts_total: [u64x4; 32],
-    added_bit_fields: usize,
-    bit_fields_to_sum: [u64x4; 512],
+    bit_fields_to_sum: ArrayVec<u64x4, { BIT_FIELD_CHUNKS.next_power_of_two() * 2 }>,
 }
 impl<const N: usize> ShipCellCounts<N> {
     pub fn new() -> Self {
@@ -33,55 +33,37 @@ impl<const N: usize> ShipCellCounts<N> {
             counts_per_ship_position: std::array::from_fn(|_| CellCount::new()),
             bit_counts: [u64x4::splat(0); 8],
             bit_counts_total: [u64x4::splat(0); 32],
-            added_bit_fields: 0,
-            bit_fields_to_sum: [u64x4::splat(0); 512],
+            bit_fields_to_sum: ArrayVec::new(),
         }
     }
 
     // returns the count of the added ships
     pub fn add_possible_ship_positions(&mut self, ship_positions: u64x4) -> u64 {
         unsafe {
-            *self
-                .bit_fields_to_sum
-                .get_unchecked_mut(self.added_bit_fields) = ship_positions;
+            self.bit_fields_to_sum.push_unchecked(ship_positions);
         }
-        self.added_bit_fields += 1;
+        // if self.bit_fields_to_sum.len() == BIT_FIELD_CHUNKS {
+        //     self.sum_last_ship();
+        // }
 
         ship_positions.count_ones().reduce_sum()
-    }
-    #[inline(never)]
-    pub fn sum_single_bits(&mut self) {
-        const BIT_FIELD_CHUNKS: usize = 255;
-        if self.added_bit_fields < BIT_FIELD_CHUNKS {
-            return;
-        }
-        let start_index = self.added_bit_fields - BIT_FIELD_CHUNKS;
-        let bit_fields_to_sum: &[u64x4; BIT_FIELD_CHUNKS] = self.bit_fields_to_sum
-            [start_index..self.added_bit_fields]
-            .first_chunk::<BIT_FIELD_CHUNKS>()
-            .unwrap();
-
-        let sum = bit_sum_255(bit_fields_to_sum);
-        bit_adder_in_place(&mut self.bit_counts_total, &sum);
-
-        self.added_bit_fields -= BIT_FIELD_CHUNKS;
     }
 
     #[inline(never)]
     pub fn sum_last_ship(&mut self) {
-        if self.added_bit_fields < BIT_FIELD_CHUNKS {
+        if self.bit_fields_to_sum.len() < BIT_FIELD_CHUNKS {
             return;
         }
-        let start_index = self.added_bit_fields - BIT_FIELD_CHUNKS;
-        let bit_fields_to_sum: &[u64x4; BIT_FIELD_CHUNKS] = self.bit_fields_to_sum
-            [start_index..self.added_bit_fields]
-            .first_chunk::<BIT_FIELD_CHUNKS>()
+        let bit_fields_to_sum: &[u64x4; BIT_FIELD_CHUNKS] = self
+            .bit_fields_to_sum
+            .last_chunk::<BIT_FIELD_CHUNKS>()
             .unwrap();
 
-        let sum = bit_sum_255(bit_fields_to_sum);
-        bit_adder_in_place(&mut self.bit_counts_total, &sum);
+        // bit_adder_in_place(&mut self.bit_counts_total, &bit_sum_1023(bit_fields_to_sum));
+        bit_adder_in_place(&mut self.bit_counts_total, &bit_sum_255(bit_fields_to_sum));
 
-        self.added_bit_fields -= BIT_FIELD_CHUNKS;
+        self.bit_fields_to_sum
+            .truncate(self.bit_fields_to_sum.len() - BIT_FIELD_CHUNKS);
     }
     #[inline(never)]
     pub fn sum_bit_counts(&mut self) {
@@ -153,6 +135,7 @@ fn bit_adder_in_place<const N: usize, const M: usize>(vals: &mut [u64x4; N], b: 
     }
 }
 
+#[inline(always)]
 fn bit_sum_15(val: &[u64x4; 15]) -> [u64x4; 4] {
     let a = bit_adder_with_carry([val[0]], [val[1]], val[2]);
     let b = bit_adder_with_carry([val[3]], [val[4]], val[5]);
@@ -172,6 +155,7 @@ fn bit_sum_63(val: &[u64x4; 63]) -> [u64x4; 6] {
     let f = bit_adder_with_carry(c, d, val[15 + 32]);
     bit_adder_with_carry(e, f, val[31])
 }
+#[inline(always)]
 fn bit_sum_255(val: &[u64x4; 255]) -> [u64x4; 8] {
     let a = bit_sum_63(val[0..63].try_into().unwrap());
     let b = bit_sum_63(val[64..64 + 63].try_into().unwrap());
@@ -180,6 +164,16 @@ fn bit_sum_255(val: &[u64x4; 255]) -> [u64x4; 8] {
     let d = bit_sum_63(val[192..192 + 63].try_into().unwrap());
     let f = bit_adder_with_carry(c, d, val[63 + 128]);
     bit_adder_with_carry(e, f, val[63 + 64])
+}
+#[inline(always)]
+fn bit_sum_1023(val: &[u64x4; 1023]) -> [u64x4; 10] {
+    let a = bit_sum_255(val[0..255].try_into().unwrap());
+    let b = bit_sum_255(val[256..256 + 255].try_into().unwrap());
+    let e = bit_adder_with_carry(a, b, val[255]);
+    let c = bit_sum_255(val[512..512 + 255].try_into().unwrap());
+    let d = bit_sum_255(val[768..768 + 255].try_into().unwrap());
+    let f = bit_adder_with_carry(c, d, val[255 + 512]);
+    bit_adder_with_carry(e, f, val[255 + 256])
 }
 fn bit_adder_with_carry<const N: usize>(
     a: [u64x4; N],
@@ -229,10 +223,9 @@ impl<const N: usize> BoardCounts<N> {
         self.board_count += other.board_count;
         self
     }
-    #[inline(never)]
     pub fn sum_cell_counts(&mut self, ship_counts: ShipCounts) {
         // add empty bit fields to sum the remaining bit fields
-        while self.ship_cell_counts.added_bit_fields < BIT_FIELD_CHUNKS {
+        for _ in 0..BIT_FIELD_CHUNKS - self.ship_cell_counts.bit_fields_to_sum.len() {
             self.ship_cell_counts
                 .add_possible_ship_positions(u64x4::splat(0));
         }

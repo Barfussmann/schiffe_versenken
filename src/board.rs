@@ -152,52 +152,25 @@ impl Board {
         Self::cell_index(x, y)
     }
 
-    pub const fn const_place_ship(
+    pub fn const_place_ship(
         &mut self,
         mut x: usize,
         mut y: usize,
         direction: Direction,
         ship: Ship,
     ) {
-        let mut width;
-        let mut height;
-        match direction {
-            Direction::Horizontal => {
-                width = ship.length() + 2;
-                height = 3;
-            }
-            Direction::Vertical => {
-                width = 3;
-                height = ship.length() + 2;
-            }
-        }
-        if x == 0 {
-            width -= 1;
-        }
-        if y == 0 {
-            height -= 1;
-        }
-
-        let low_x = x.saturating_sub(1);
-        let low_y = y.saturating_sub(1);
-
-        let high_x = low_x + width;
-        let high_y = low_y + height;
-
-        let mut i_y = low_y;
-        while i_y < high_y {
-            let mut i_x = low_x;
-            while i_x < high_x {
+        let (width, height) = match direction {
+            Direction::Horizontal => (ship.length() + 1, 2),
+            Direction::Vertical => (2, ship.length() + 1),
+        };
+        for i_y in y.saturating_sub(1)..y + height {
+            for i_x in x.saturating_sub(1)..x + width {
                 let index = Self::saturating_cell_index(i_x, i_y);
                 self.cells[index] = Cell::Protected;
-
-                i_x += 1;
             }
-            i_y += 1;
         }
 
-        let mut i = 0;
-        while i < ship.length() {
+        for _ in 0..ship.length() {
             let index = Self::saturating_cell_index(x, y);
             self.cells[index] = Cell::Ship;
 
@@ -205,15 +178,32 @@ impl Board {
                 Direction::Horizontal => x += 1,
                 Direction::Vertical => y += 1,
             }
-
-            i += 1;
         }
     }
     pub const fn cell_index(x: usize, y: usize) -> usize {
         x + y * SIZE
     }
 
-    pub fn try_place_ship(mut self, ship: &Ship, pos: IVec2, direction: Direction) -> Option<Self> {
+    pub fn all_ship_placements(&self, ship: Ship) -> impl Iterator<Item = Board> {
+        std::iter::from_coroutine(
+            #[coroutine]
+            move || {
+                for y in 0..SIZE {
+                    for x in 0..SIZE {
+                        let pos = IVec2::new(x as i32, y as i32);
+                        if x < SIZE - ship.length() + 1 {
+                            yield self.try_place_ship(ship, pos, Direction::Horizontal)
+                        }
+                        if y < SIZE - ship.length() + 1 {
+                            yield self.try_place_ship(ship, pos, Direction::Vertical)
+                        }
+                    }
+                }
+            },
+        )
+        .flatten()
+    }
+    pub fn try_place_ship(mut self, ship: Ship, pos: IVec2, direction: Direction) -> Option<Self> {
         let top_left = pos;
 
         let bottom_right = pos
