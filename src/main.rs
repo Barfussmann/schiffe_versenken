@@ -33,8 +33,17 @@ mod bit_iter;
 mod board_counts;
 mod ship;
 mod solver;
+mod solver_render;
 
 fn main() {
+    let mut terminal = ratatui::init();
+    let mut solver_render = solver_render::SolverRender::new(Solver::<5>::new(
+        ShipCounts::new([1, 1, 2, 1]),
+        Board::new(),
+    ));
+    solver_render.run(&mut terminal);
+    ratatui::restore();
+
     rayon::ThreadPoolBuilder::new()
         .num_threads(1)
         .build_global()

@@ -15,7 +15,7 @@ pub struct Solver<const N: usize> {
     pub current_board: Board,
     bit_board: BitBoard<N>,
     pub ship_counts: ShipCounts,
-    board_counts: BoardCounts<N>,
+    pub board_counts: BoardCounts<N>,
 }
 
 impl<const N: usize> Solver<N> {
@@ -33,30 +33,30 @@ impl<const N: usize> Solver<N> {
         self.current_board = Board::new();
     }
     pub fn run(&mut self) {
-        let start_time = Instant::now();
+        // let start_time = Instant::now();
         self.board_counts.board_count += self.place_ship_recursive::<0>(self.bit_board);
         self.board_counts.sum_cell_counts(self.ship_counts);
 
-        let (x, y) = self.get_best_water_cell();
+        // let (x, y) = self.get_best_water_cell();
 
-        let elapsed_time = start_time.elapsed();
-        let boards_per_second =
-            (self.board_counts.board_count as f64 / elapsed_time.as_secs_f64()) as u64;
-        println!(
-            "in: {elapsed_time:7.3?}, possibilities: {:12}, calculated: {:12} hz",
-            self.board_counts
-                .board_count
-                .to_formatted_string(&Locale::en),
-            boards_per_second.to_formatted_string(&Locale::en)
-        );
-        self.board_counts.print_colorfull();
-        println!(
-            "Average placed ships: {}",
-            self.board_counts.counts.iter().sum::<u64>() as f64
-                / self.board_counts.board_count as f64
-        );
+        // let elapsed_time = start_time.elapsed();
+        // let boards_per_second =
+        //     (self.board_counts.board_count as f64 / elapsed_time.as_secs_f64()) as u64;
+        // println!(
+        //     "in: {elapsed_time:7.3?}, possibilities: {:12}, calculated: {:12} hz",
+        //     self.board_counts
+        //         .board_count
+        //         .to_formatted_string(&Locale::en),
+        //     boards_per_second.to_formatted_string(&Locale::en)
+        // );
+        // // self.board_counts.print_colorfull();
+        // println!(
+        //     "Average placed ships: {}",
+        //     self.board_counts.counts.iter().sum::<u64>() as f64
+        //         / self.board_counts.board_count as f64
+        // );
 
-        println!("Max (x, y): ({}, {})", (x as u8 + b'A') as char, y + 1);
+        // println!("Max (x, y): ({}, {})", (x as u8 + b'A') as char, y + 1);
     }
 
     fn get_best_water_cell(&self) -> (usize, usize) {

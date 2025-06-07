@@ -3,8 +3,15 @@ use crate::{
     ship::ShipCounts,
 };
 use arrayvec::ArrayVec;
-use colored::Colorize;
 use colorgrad::Gradient;
+use ratatui::{
+    buffer::Buffer,
+    layout::Rect,
+    style::{Color, Style, Stylize, palette::material::BLACK},
+    symbols::border,
+    text::{Line, Span, Text},
+    widgets::{Block, Paragraph, Widget},
+};
 
 use super::BOARD_SIZE;
 use super::SIZE;
@@ -249,29 +256,42 @@ impl<const N: usize> BoardCounts<N> {
             *cell_counts = CellCount::new();
         }
     }
-    pub fn print_colorfull(&self) {
-        println!();
-
+    pub fn to_ratatui_text(&self) -> Text<'_> {
         let max_val = *self.counts.iter().max().unwrap() as f32;
 
         let color_grad = colorgrad::preset::rd_yl_gn();
 
-        for row in self.counts.chunks(SIZE).take(SIZE) {
-            for count in row {
+        Text::from_iter(self.counts.chunks(SIZE).take(SIZE).map(|row| {
+            Line::from_iter(row.iter().map(|count| {
                 let probability = *count as f32 / (self.board_count as f32);
-
                 let color_scale = *count as f32 / max_val;
-
                 let rgba8 = color_grad.at(color_scale).to_rgba8();
 
-                let colored_string = format_args!("{:3.0}", probability * 1000.)
-                    .to_string()
-                    .on_truecolor(rgba8[0], rgba8[1], rgba8[2])
-                    .black();
-                print!("{colored_string} ");
-            }
-            println!();
-        }
+                Span::styled(
+                    format_args!("{:3.0}", probability * 1000.).to_string(),
+                    Style::default()
+                        .bg(Color::Rgb(rgba8[0], rgba8[1], rgba8[2]))
+                        .fg(BLACK),
+                )
+            }))
+        }))
+    }
+}
+impl<const N: usize> Widget for &BoardCounts<N> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let title = Line::from("Ship hit probabilities".bold());
+        let instructions = Line::from("Press 'q' to quit".bold());
+        let block = Block::bordered()
+            .title(title.centered())
+            .title_bottom(instructions.centered())
+            .border_set(border::THICK);
+
+        let probs = self.to_ratatui_text();
+
+        Paragraph::new(probs)
+            .centered()
+            .block(block)
+            .render(area, buf);
     }
 }
 

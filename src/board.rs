@@ -191,10 +191,10 @@ impl Board {
                 for y in 0..SIZE {
                     for x in 0..SIZE {
                         let pos = IVec2::new(x as i32, y as i32);
-                        if x < SIZE - ship.length() + 1 {
+                        if x < SIZE - ship.length() - 1 {
                             yield self.try_place_ship(ship, pos, Direction::Horizontal)
                         }
-                        if y < SIZE - ship.length() + 1 {
+                        if y < SIZE - ship.length() - 1 {
                             yield self.try_place_ship(ship, pos, Direction::Vertical)
                         }
                     }
@@ -212,10 +212,9 @@ impl Board {
                 Direction::Vertical => ivec2(0, ship.length() as i32 - 1),
             };
 
-        let protected_top_left =
-            (top_left - IVec2::ONE).clamp(IVec2::ZERO, IVec2::splat(SIZE as i32 - 1));
-        let protected_bottom_right =
-            (bottom_right + IVec2::ONE).clamp(IVec2::ZERO, IVec2::splat(SIZE as i32 - 1));
+        const MAX: IVec2 = IVec2::splat(SIZE as i32 - 1);
+        let protected_top_left = (top_left - IVec2::ONE).clamp(IVec2::ZERO, MAX);
+        let protected_bottom_right = (bottom_right + IVec2::ONE).clamp(IVec2::ZERO, MAX);
 
         let mut cell_count_protected = CellCount::new();
         self.map_rect_cells(protected_top_left, protected_bottom_right, |cell| {
@@ -231,17 +230,21 @@ impl Board {
 
         let is_allowed = cell_count_ship[Cell::Protected] == 0         // would be placed on protected cells
             && cell_count_ship[Cell::Ship] == 0                        // would be placed on ship cells
-            && cell_count_ship[Cell::ShipHit] != ship.length() as u64  // would only have hits those are not usefull
+            && cell_count_ship[Cell::ShipHit] != ship.length() as u64  // would only have hits, those ships are not usefull
             && only_protected[Cell::ShipHit] == 0; // would not use all ship hits
 
         if !is_allowed {
             return None;
         }
 
+        self.map_rect_cells(protected_top_left, protected_bottom_right, |cell| {
+            *cell = Cell::Protected
+        });
         self.map_rect_cells(top_left, bottom_right, |cell| *cell = Cell::Ship);
 
         Some(self)
     }
+    /// Maps a function over a rectangular area of the board.
     fn map_rect_cells(
         &mut self,
         top_left: IVec2,
