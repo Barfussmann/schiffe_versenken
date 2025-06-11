@@ -14,7 +14,7 @@ impl<const N: usize> BitBoard<N> {
     pub fn allowable<const SHIP_INDEX: usize>(&self) -> u64x4 {
         self.protected[SHIP_INDEX]
     }
-    pub fn new(board: Board, ship_counts: ShipCounts) -> Self {
+    pub fn new(board: &Board, ship_counts: ShipCounts) -> Self {
         let protected = board.to_protected();
 
         let pro_2 = protected.shifted_protected::<{ Ship::new(2) }>();
@@ -72,7 +72,7 @@ impl<const N: usize> PlacedBitShips<N> {
                             let mut board = Board::new();
                             board.const_place_ship(x, y, dir, ship);
 
-                            placed_ships[bit_board_index] = BitBoard::new(board, ship_counts);
+                            placed_ships[bit_board_index] = BitBoard::new(&board, ship_counts);
                         }
                     }
                 }

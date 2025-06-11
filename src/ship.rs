@@ -25,16 +25,24 @@ impl ShipCounts {
                 std::iter::repeat_n(unsafe { *SHIPS.get_unchecked(ship_index) }, *ship_count)
             })
     }
+    pub fn total_ship_count(&self) -> usize {
+        self.counts.into_iter().sum::<usize>()
+    }
+    pub fn remove_placed_ship(&self, placed_ship: Ship) -> Self {
+        let mut removed = *self;
+        removed.counts[placed_ship.index()] -= 1;
+        removed
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ConstParamTy)]
 pub enum ShipLength {
-    _1 = 1,
+    // _1 = 1,
     _2 = 2,
     _3 = 3,
     _4 = 4,
     _5 = 5,
-    _6 = 6,
+    // _6 = 6,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ConstParamTy)]
@@ -48,17 +56,20 @@ impl Ship {
     }
     pub const fn new(length: usize) -> Ship {
         let length = match length {
-            1 => ShipLength::_1,
+            // 1 => ShipLength::_1,
             2 => ShipLength::_2,
             3 => ShipLength::_3,
             4 => ShipLength::_4,
             5 => ShipLength::_5,
-            6 => ShipLength::_6,
+            // 6 => ShipLength::_6,
             _ => unreachable!(),
         };
         Ship { length }
     }
     pub const fn length(self) -> usize {
         self.length as usize
+    }
+    pub const fn index(self) -> usize {
+        self.length() - 2
     }
 }

@@ -70,7 +70,7 @@ impl Display for Cell {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 #[repr(align(128))]
 pub struct Board {
     pub cells: [Cell; BOARD_SIZE],
@@ -83,8 +83,9 @@ impl Board {
         }
     }
 
-    pub fn to_protected(mut self) -> Self {
-        for cell in &mut self.cells {
+    pub fn to_protected(&self) -> Self {
+        let mut this = self.clone();
+        for cell in &mut this.cells {
             *cell = match cell {
                 // Cell::Ship => Cell::Protected,
                 // _ => Cell::Water,
@@ -92,7 +93,7 @@ impl Board {
                 Cell::Water => Cell::Water,
             };
         }
-        self
+        this
     }
     pub fn shifted_protected<const S: Ship>(&self) -> u64x4 {
         let x_shifted = self.multishift(0..S.length()).to_u64x2(Cell::Protected);
@@ -129,7 +130,7 @@ impl Board {
         result
     }
 
-    pub fn to_u64x2(self, cell_type_to_one: Cell) -> u64x2 {
+    pub fn to_u64x2(&self, cell_type_to_one: Cell) -> u64x2 {
         let mut val = 0u128;
 
         for i in 0..u128::BITS as usize {
@@ -183,19 +184,29 @@ impl Board {
     pub const fn cell_index(x: usize, y: usize) -> usize {
         x + y * SIZE
     }
-
-    pub fn all_ship_placements(&self, ship: Ship) -> impl Iterator<Item = Board> {
+    pub fn all_ship_placements(
+        &self,
+        ship_counts: &ShipCounts,
+    ) -> impl Iterator<Item = (Board, Ship)> {
         std::iter::from_coroutine(
             #[coroutine]
             move || {
-                for y in 0..SIZE {
-                    for x in 0..SIZE {
-                        let pos = IVec2::new(x as i32, y as i32);
-                        if x < SIZE - ship.length() - 1 {
-                            yield self.try_place_ship(ship, pos, Direction::Horizontal)
-                        }
-                        if y < SIZE - ship.length() - 1 {
-                            yield self.try_place_ship(ship, pos, Direction::Vertical)
+                for ship in ship_counts.iter_ships().collect::<Vec<_>>() {
+                    for y in 0..SIZE {
+                        for x in 0..SIZE {
+                            let pos = IVec2::new(x as i32, y as i32);
+                            if x + ship.length() - 1 < SIZE {
+                                // if x < SIZE - ship.length() - 1 {
+                                yield self
+                                    .try_place_ship(ship, pos, Direction::Horizontal)
+                                    .map(|board| (board, ship))
+                            }
+                            if y + ship.length() - 1 < SIZE {
+                                // if y < SIZE - ship.length() - 1 {
+                                yield self
+                                    .try_place_ship(ship, pos, Direction::Vertical)
+                                    .map(|board| (board, ship))
+                            }
                         }
                     }
                 }
@@ -203,7 +214,7 @@ impl Board {
         )
         .flatten()
     }
-    pub fn try_place_ship(mut self, ship: Ship, pos: IVec2, direction: Direction) -> Option<Self> {
+    pub fn try_place_ship(&self, ship: Ship, pos: IVec2, direction: Direction) -> Option<Self> {
         let top_left = pos;
 
         let bottom_right = pos
@@ -217,47 +228,67 @@ impl Board {
         let protected_bottom_right = (bottom_right + IVec2::ONE).clamp(IVec2::ZERO, MAX);
 
         let mut cell_count_protected = CellCount::new();
-        self.map_rect_cells(protected_top_left, protected_bottom_right, |cell| {
+        self.for_each_rect_cells(protected_top_left, protected_bottom_right, |cell| {
             cell_count_protected.add_cell(*cell);
         });
 
         let mut cell_count_ship = CellCount::new();
-        self.map_rect_cells(top_left, bottom_right, |cell| {
+        self.for_each_rect_cells(top_left, bottom_right, |cell| {
             cell_count_ship.add_cell(*cell);
         });
 
         let only_protected = cell_count_protected - cell_count_ship;
 
+        let allowable_hit_range = 1..ship.length() as u64; // Needs atleast one hit to be placed and if it's only hits it is'nt usefull
+
         let is_allowed = cell_count_ship[Cell::Protected] == 0         // would be placed on protected cells
             && cell_count_ship[Cell::Ship] == 0                        // would be placed on ship cells
-            && cell_count_ship[Cell::ShipHit] != ship.length() as u64  // would only have hits, those ships are not usefull
+            && allowable_hit_range.contains(&cell_count_ship[Cell::ShipHit])
             && only_protected[Cell::ShipHit] == 0; // would not use all ship hits
+
+        // println!(
+        //     "({}, {}, {}, {}, {})",
+        //     cell_count_ship[Cell::Protected],
+        //     cell_count_ship[Cell::Ship],
+        //     cell_count_ship[Cell::ShipHit],
+        //     only_protected[Cell::ShipHit],
+        //     is_allowed,
+        // );
 
         if !is_allowed {
             return None;
         }
 
-        self.map_rect_cells(protected_top_left, protected_bottom_right, |cell| {
+        let mut this = self.clone();
+        this.for_each_rect_cells_mut(protected_top_left, protected_bottom_right, |cell| {
             *cell = Cell::Protected
         });
-        self.map_rect_cells(top_left, bottom_right, |cell| *cell = Cell::Ship);
+        this.for_each_rect_cells_mut(top_left, bottom_right, |cell| *cell = Cell::Ship);
 
-        Some(self)
+        Some(this)
     }
-    /// Maps a function over a rectangular area of the board.
-    fn map_rect_cells(
+    /// Maps a function over a rectangular area of the board. Bottom right is inclusive.
+    fn for_each_rect_cells_mut(
         &mut self,
         top_left: IVec2,
         bottom_right: IVec2,
         mut f: impl FnMut(&mut Cell),
     ) {
-        for y in top_left.y..bottom_right.y {
-            for x in top_left.x..bottom_right.x {
+        for y in top_left.y..=bottom_right.y {
+            for x in top_left.x..=bottom_right.x {
                 f(&mut self.cells[Self::cell_index(x as usize, y as usize)])
             }
         }
     }
-    pub fn to_bitboard<const N: usize>(self, ship_counts: ShipCounts) -> BitBoard<N> {
+    /// Maps a function over a rectangular area of the board. Bottom right is inclusive.
+    fn for_each_rect_cells(&self, top_left: IVec2, bottom_right: IVec2, mut f: impl FnMut(&Cell)) {
+        for y in top_left.y..=bottom_right.y {
+            for x in top_left.x..=bottom_right.x {
+                f(&self.cells[Self::cell_index(x as usize, y as usize)])
+            }
+        }
+    }
+    pub fn to_bitboard<const N: usize>(&self, ship_counts: ShipCounts) -> BitBoard<N> {
         BitBoard::new(self, ship_counts)
     }
 }

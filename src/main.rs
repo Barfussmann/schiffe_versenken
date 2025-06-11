@@ -22,8 +22,8 @@
 mod board;
 
 use board::Board;
-use ship::ShipCounts;
-use solver::Solver;
+
+use crate::{board::Cell, ship::ShipCounts, solver::DynSolver};
 
 const SIZE: usize = 10;
 const BOARD_SIZE: usize = (SIZE * SIZE).next_multiple_of(64);
@@ -36,21 +36,39 @@ mod solver;
 mod solver_render;
 
 fn main() {
-    let mut terminal = ratatui::init();
-    let mut solver_render = solver_render::SolverRender::new(Solver::<5>::new(
-        ShipCounts::new([1, 1, 2, 1]),
-        Board::new(),
-    ));
-    solver_render.run(&mut terminal);
-    ratatui::restore();
+    // rayon::ThreadPoolBuilder::new()
+    //     .num_threads(1)
+    //     .build_global()
+    //     .unwrap();
 
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(1)
-        .build_global()
-        .unwrap();
+    // let mut terminal = ratatui::init();
+    // let mut solver_render = solver_render::SolverRender::new(DynSolver::new(
+    //     ShipCounts::new([1, 1, 2, 1]),
+    //     &Board::new(),
+    // ));
+    // solver_render.run(&mut terminal);
+    // ratatui::restore();
+
+    // let mut board = Board::new();
+    // board.cells[66] = Cell::Protected;
+    // let mut solver = DynSolver::new(ShipCounts::new([1, 1, 2, 1]), board);
+    // solver.step();
+    let mut solver = DynSolver::new(ShipCounts::new([1, 1, 2, 1]), Board::new());
+    solver.split_and_count();
+
+    // board.
+
+    // for board in Solver::<1>::new(ShipCounts::new([1, 0, 0, 0]), board).run() {
+    // for (board, ship) in Solver::<1>::new(ShipCounts::new([1, 0, 0, 0]), board).run() {
+    //     // for board in Solver::<5>::new(ShipCounts::new([1, 1, 2, 1]), board).run() {
+    //     println!("{board}");
+    // }
+    // Solver::<1>::new(ShipCounts::new([1, 0, 0, 0]), board)
+    //     .run()
+    //     .count();
 
     // for _ in 0..100 {
-    //     Solver::<5>::new(ShipCounts::new([1, 1, 2, 1]), Board::new()).run();
+    //     DynSolver::new(ShipCounts::new([1, 1, 2, 1]), &Board::new()).run();
     // }
 }
 

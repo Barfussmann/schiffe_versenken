@@ -15,10 +15,7 @@ use ratatui::{
 
 use super::BOARD_SIZE;
 use super::SIZE;
-use core::{
-    convert::TryInto,
-    simd::{u64x4, u64x64},
-};
+use core::{convert::TryInto, simd::u64x4};
 use std::{
     fmt::{Display, Write},
     iter::zip,
@@ -45,7 +42,7 @@ impl<const N: usize> ShipCellCounts<N> {
     }
 
     // returns the count of the added ships
-    pub fn add_possible_ship_positions(&mut self, ship_positions: u64x4) -> u64 {
+    pub fn add_possible_ship_positions(&mut self, ship_positions: u64x4) -> u32 {
         unsafe {
             self.bit_fields_to_sum.push_unchecked(ship_positions);
         }
@@ -53,7 +50,7 @@ impl<const N: usize> ShipCellCounts<N> {
         //     self.sum_last_ship();
         // }
 
-        ship_positions.count_ones().reduce_sum()
+        ship_positions.count_ones().reduce_sum() as u32
     }
 
     #[inline(never)]
@@ -83,7 +80,7 @@ impl<const N: usize> ShipCellCounts<N> {
                     mask8x64::from_bitmask(self.bit_counts[bit_index][i])
                         .to_int()
                         .cast()
-                        * u64x64::splat(mul as u64);
+                        * u32x64::splat(mul as u32);
             }
             self.bit_counts[bit_index] = u64x4::splat(0);
         }
@@ -94,7 +91,7 @@ impl<const N: usize> ShipCellCounts<N> {
                     mask8x64::from_bitmask(self.bit_counts_total[bit_index][i])
                         .to_int()
                         .cast()
-                        * u64x64::splat(mul as u64);
+                        * u32x64::splat(mul as u32);
             }
             self.bit_counts_total[bit_index] = u64x4::splat(0);
         }
@@ -103,22 +100,22 @@ impl<const N: usize> ShipCellCounts<N> {
 
 #[derive(Debug, Clone)]
 pub struct CellCount {
-    position_counts: [u64x64; 4],
+    position_counts: [u32x64; 4],
 }
 impl CellCount {
     pub fn new() -> CellCount {
         CellCount {
-            position_counts: [u64x64::splat(0); 4],
+            position_counts: [u32x64::splat(0); 4],
         }
     }
-    fn counts(&self) -> [u64; 256] {
+    fn counts(&self) -> [u32; 256] {
         self.position_counts
             .map(|x| x.to_array())
             .as_flattened()
             .try_into()
             .unwrap()
     }
-    pub fn add_single_ship(&mut self, index: u8, counts: u64) {
+    pub fn add_single_ship(&mut self, index: u8, counts: u32) {
         // self.counts[index as usize] += counts;
         let u64_index = index as usize / 64;
         let rem_index = index as usize % 64;
@@ -199,8 +196,8 @@ fn bit_adder_with_carry<const N: usize>(
 
 #[derive(Debug, Clone)]
 pub struct BoardCounts<const N: usize> {
-    pub counts: [u64; BOARD_SIZE],
-    pub board_count: u64,
+    pub counts: [u32; BOARD_SIZE],
+    pub board_count: u32,
     pub ship_cell_counts: ShipCellCounts<N>,
 }
 
@@ -230,7 +227,7 @@ impl<const N: usize> BoardCounts<N> {
         self.board_count += other.board_count;
         self
     }
-    pub fn sum_cell_counts(&mut self, ship_counts: ShipCounts) {
+    pub fn sum_cell_counts(&mut self, ship_counts: &ShipCounts) {
         // add empty bit fields to sum the remaining bit fields
         for _ in 0..BIT_FIELD_CHUNKS - self.ship_cell_counts.bit_fields_to_sum.len() {
             self.ship_cell_counts
