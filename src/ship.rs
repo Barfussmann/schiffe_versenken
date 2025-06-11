@@ -30,7 +30,10 @@ impl ShipCounts {
     }
     pub fn remove_placed_ship(&self, placed_ship: Ship) -> Self {
         let mut removed = *self;
-        removed.counts[placed_ship.index()] -= 1;
+
+        removed.counts[placed_ship.index()] = removed.counts[placed_ship.index()]
+            .checked_sub(1)
+            .expect("Can't go lower than 0 Ships");
         removed
     }
 }
@@ -69,7 +72,7 @@ impl Ship {
     pub const fn length(self) -> usize {
         self.length as usize
     }
-    pub const fn index(self) -> usize {
-        self.length() - 2
+    pub fn index(self) -> usize {
+        SHIPS.iter().position(|s| *s == self).unwrap()
     }
 }

@@ -70,8 +70,8 @@ impl DynSolver {
         let mut total = self.board_counts;
 
         for (sub_board, placed_ship) in self.current_board.all_ship_placements(&self.ship_counts) {
-            let new_ship_counts = self.ship_counts.remove_placed_ship(placed_ship);
             println!("length: {}", placed_ship.length());
+            let new_ship_counts = self.ship_counts.remove_placed_ship(placed_ship);
             let mut solver = DynSolver::new(new_ship_counts, sub_board);
             solver.step();
             let sub_count = solver.board_counts;
