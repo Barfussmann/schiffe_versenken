@@ -35,6 +35,7 @@ mod cell;
 mod ship;
 mod solver;
 mod solver_render;
+mod utils;
 
 fn main() {
     // rayon::ThreadPoolBuilder::new()

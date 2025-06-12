@@ -1,8 +1,9 @@
 use crate::bit_board::BitBoard;
 use crate::cell::{Cell, CellCount};
 use crate::ship::{Ship, ShipCounts};
+use crate::utils::rect_iter;
 use crate::{BOARD_SIZE, SIZE};
-use glam::{IVec2, ivec2};
+use glam::{IVec2, Vec2Swizzles, ivec2};
 
 use core::iter::Iterator;
 use core::simd::u64x4;
@@ -53,11 +54,12 @@ impl Board {
         let mut y_mask = Board::new();
 
         // The last rows the ship can't fit without going over the boarder.
-        for y in 0..SIZE {
-            for x in 0..SIZE - (S.length() - 1) {
-                x_mask.cells[Board::cell_index(x, y)] = Cell::Protected;
-                y_mask.cells[Board::cell_index(y, x)] = Cell::Protected;
-            }
+        for pos in rect_iter(
+            IVec2::ZERO,
+            ivec2((SIZE - (S.length() - 1)) as i32, SIZE as i32),
+        ) {
+            x_mask.cells[Board::cell_index(pos)] = Cell::Protected;
+            y_mask.cells[Board::cell_index(pos.yx())] = Cell::Protected;
         }
         let x = !x_shifted & x_mask.to_u64x2(Cell::Protected);
         let y = !y_shifted & y_mask.to_u64x2(Cell::Protected);
@@ -90,16 +92,6 @@ impl Board {
         }
         u64x2::from_array([val as u64, (val >> 64) as u64])
     }
-    const fn saturating_cell_index(mut x: usize, mut y: usize) -> usize {
-        if x >= SIZE {
-            x = SIZE - 1;
-        }
-        if y >= SIZE {
-            y = SIZE - 1;
-        }
-
-        Self::cell_index(x, y)
-    }
 
     pub fn const_place_ship(&mut self, x: usize, y: usize, direction: Direction, ship: Ship) {
         let offset = match direction {
@@ -117,8 +109,8 @@ impl Board {
         };
         self.for_each_rect_cells_mut(pos, pos + ship_offset, |cell| *cell = Cell::Ship);
     }
-    pub const fn cell_index(x: usize, y: usize) -> usize {
-        x + y * SIZE
+    pub const fn cell_index(pos: IVec2) -> usize {
+        pos.x as usize + pos.y as usize * SIZE
     }
     pub fn all_ship_placements(
         &self,
@@ -128,21 +120,16 @@ impl Board {
             #[coroutine]
             move || {
                 for ship in ship_counts.iter_ships().collect::<Vec<_>>() {
-                    for y in 0..SIZE {
-                        for x in 0..SIZE {
-                            let pos = IVec2::new(x as i32, y as i32);
-                            if x + ship.length() - 1 < SIZE {
-                                // if x < SIZE - ship.length() - 1 {
-                                yield self
-                                    .try_place_ship(ship, pos, Direction::Horizontal)
-                                    .map(|board| (board, ship))
-                            }
-                            if y + ship.length() - 1 < SIZE {
-                                // if y < SIZE - ship.length() - 1 {
-                                yield self
-                                    .try_place_ship(ship, pos, Direction::Vertical)
-                                    .map(|board| (board, ship))
-                            }
+                    for pos in rect_iter(IVec2::ZERO, IVec2::splat(SIZE as i32)) {
+                        if pos.x as usize + ship.length() <= SIZE {
+                            yield self
+                                .try_place_ship(ship, pos, Direction::Horizontal)
+                                .map(|board| (board, ship))
+                        }
+                        if pos.y as usize + ship.length() <= SIZE {
+                            yield self
+                                .try_place_ship(ship, pos, Direction::Vertical)
+                                .map(|board| (board, ship))
                         }
                     }
                 }
@@ -201,23 +188,15 @@ impl Board {
         bottom_right: IVec2,
         mut f: impl FnMut(&mut Cell),
     ) {
-        let top_left = top_left.clamp(IVec2::ZERO, MAX_POS);
-        let bottom_right = bottom_right.clamp(IVec2::ZERO, MAX_POS);
-        for y in top_left.y..=bottom_right.y {
-            for x in top_left.x..=bottom_right.x {
-                f(&mut self.cells[Self::cell_index(x as usize, y as usize)])
-            }
+        for pos in rect_iter(top_left, bottom_right + IVec2::ONE) {
+            f(&mut self.cells[Self::cell_index(pos)])
         }
     }
     /// Maps a function over a rectangular area of the board. Bottom right is inclusive.
     /// Clamps the cords to the size of the board.
     fn for_each_rect_cells(&self, top_left: IVec2, bottom_right: IVec2, mut f: impl FnMut(&Cell)) {
-        let top_left = top_left.clamp(IVec2::ZERO, MAX_POS);
-        let bottom_right = bottom_right.clamp(IVec2::ZERO, MAX_POS);
-        for y in top_left.y..=bottom_right.y {
-            for x in top_left.x..=bottom_right.x {
-                f(&self.cells[Self::cell_index(x as usize, y as usize)])
-            }
+        for pos in rect_iter(top_left, bottom_right + IVec2::ONE) {
+            f(&self.cells[Self::cell_index(pos)])
         }
     }
     pub fn to_bitboard<const N: usize>(&self, ship_counts: ShipCounts) -> BitBoard<N> {
