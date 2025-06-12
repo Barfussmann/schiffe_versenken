@@ -17,7 +17,28 @@ pub enum Direction {
     Vertical = 1,
 }
 
-const MAX_POS: IVec2 = IVec2::splat(SIZE as i32 - 1);
+enum PlacementResult {
+    NotAllowed,
+    NoShipHitCovering((Board, Ship)),
+    PartialShipHitCovering((Board, Ship)),
+    FullShipHitCovering((Board, Ship)),
+}
+pub struct AllShipPlacment {
+    pub partial_ship_hit_covering: Vec<(Board, Ship)>,
+    pub full_ship_hit_covering: Vec<(Board, Ship)>,
+}
+impl AllShipPlacment {
+    fn add_placement_result(&mut self, placement_result: PlacementResult) {
+        match placement_result {
+            PlacementResult::NotAllowed => {}
+            PlacementResult::NoShipHitCovering(_) => {}
+            PlacementResult::PartialShipHitCovering(board) => {
+                self.partial_ship_hit_covering.push(board)
+            }
+            PlacementResult::FullShipHitCovering(board) => self.full_ship_hit_covering.push(board),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 #[repr(align(128))]
@@ -112,32 +133,26 @@ impl Board {
     pub const fn cell_index(pos: IVec2) -> usize {
         pos.x as usize + pos.y as usize * SIZE
     }
-    pub fn all_ship_placements(
-        &self,
-        ship_counts: &ShipCounts,
-    ) -> impl Iterator<Item = (Board, Ship)> {
-        std::iter::from_coroutine(
-            #[coroutine]
-            move || {
-                for ship in ship_counts.iter_ships().collect::<Vec<_>>() {
-                    for pos in rect_iter(IVec2::ZERO, IVec2::splat(SIZE as i32)) {
-                        if pos.x as usize + ship.length() <= SIZE {
-                            yield self
-                                .try_place_ship(ship, pos, Direction::Horizontal)
-                                .map(|board| (board, ship))
-                        }
-                        if pos.y as usize + ship.length() <= SIZE {
-                            yield self
-                                .try_place_ship(ship, pos, Direction::Vertical)
-                                .map(|board| (board, ship))
-                        }
-                    }
+    pub fn all_ship_placements(&self, ship_counts: &ShipCounts) -> AllShipPlacment {
+        let mut all_ship_placement = AllShipPlacment {
+            partial_ship_hit_covering: Vec::new(),
+            full_ship_hit_covering: Vec::new(),
+        };
+        for ship in ship_counts.iter_ships().collect::<Vec<_>>() {
+            for pos in rect_iter(IVec2::ZERO, IVec2::splat(SIZE as i32)) {
+                if pos.x as usize + ship.length() <= SIZE {
+                    let placement_result = self.try_place_ship(ship, pos, Direction::Horizontal);
+                    all_ship_placement.add_placement_result(placement_result);
                 }
-            },
-        )
-        .flatten()
+                if pos.y as usize + ship.length() <= SIZE {
+                    let placement_result = self.try_place_ship(ship, pos, Direction::Vertical);
+                    all_ship_placement.add_placement_result(placement_result);
+                }
+            }
+        }
+        all_ship_placement
     }
-    pub fn try_place_ship(&self, ship: Ship, pos: IVec2, direction: Direction) -> Option<Self> {
+    fn try_place_ship(&self, ship: Ship, pos: IVec2, direction: Direction) -> PlacementResult {
         let top_left = pos;
 
         let bottom_right = pos
@@ -166,10 +181,11 @@ impl Board {
         let is_allowed = cell_count_ship[Cell::Protected] == 0         // would be placed on protected cells
             && cell_count_ship[Cell::Ship] == 0                        // would be placed on ship cells
             && allowable_hit_range.contains(&cell_count_ship[Cell::ShipHit])
+            // && allowable_hit_range.contains(&cell_count_ship[Cell::ShipHit])
             && only_protected[Cell::ShipHit] == 0; // would not use all ship hits
 
         if !is_allowed {
-            return None;
+            return PlacementResult::NotAllowed;
         }
 
         let mut this = self.clone();
@@ -178,7 +194,13 @@ impl Board {
         });
         this.for_each_rect_cells_mut(top_left, bottom_right, |cell| *cell = Cell::Ship);
 
-        Some(this)
+        if cell_count_ship[Cell::ShipHit] == 0 {
+            PlacementResult::NoShipHitCovering((this, ship))
+        } else if (cell_count_ship[Cell::ShipHit] as usize) < ship.length() {
+            PlacementResult::PartialShipHitCovering((this, ship))
+        } else {
+            PlacementResult::FullShipHitCovering((this, ship))
+        }
     }
     /// Maps a function over a rectangular area of the board. Bottom right is inclusive.
     /// Clamps the cords to the size of the board.
