@@ -1,4 +1,5 @@
 use crate::bit_board::BitBoard;
+use crate::cell::{Cell, CellCount};
 use crate::ship::{Ship, ShipCounts};
 use crate::{BOARD_SIZE, SIZE};
 use glam::{IVec2, ivec2};
@@ -7,7 +8,6 @@ use core::iter::Iterator;
 use core::simd::u64x4;
 use std::fmt::Display;
 use std::fmt::Write;
-use std::ops::{Index, Sub};
 use std::simd::u64x2;
 
 #[derive(Debug, Clone, Copy)]
@@ -16,59 +16,7 @@ pub enum Direction {
     Vertical = 1,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Cell {
-    Water = 0,
-    Protected = 1,
-    ShipHit = 2,
-    Ship = 3,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct CellCount {
-    counts: [u64; 4],
-}
-impl CellCount {
-    pub fn new() -> Self {
-        Self { counts: [0; 4] }
-    }
-    pub fn add_cell(&mut self, cell: Cell) {
-        self.counts[cell as usize] += 1;
-    }
-}
-
-impl Index<Cell> for CellCount {
-    type Output = u64;
-
-    fn index(&self, index: Cell) -> &Self::Output {
-        &self.counts[index as usize]
-    }
-}
-impl Sub<CellCount> for CellCount {
-    type Output = CellCount;
-
-    fn sub(self, rhs: CellCount) -> Self::Output {
-        CellCount {
-            counts: [
-                self.counts[0] - rhs.counts[0],
-                self.counts[1] - rhs.counts[1],
-                self.counts[2] - rhs.counts[2],
-                self.counts[3] - rhs.counts[3],
-            ],
-        }
-    }
-}
-
-impl Display for Cell {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let str = match self {
-            Cell::Protected => " o ",
-            Cell::Water => " _ ",
-            Cell::ShipHit | Cell::Ship => " X ",
-        };
-        f.write_str(str)
-    }
-}
+const MAX_POS: IVec2 = IVec2::splat(SIZE as i32 - 1);
 
 #[derive(Debug, Clone)]
 #[repr(align(128))]
@@ -153,33 +101,21 @@ impl Board {
         Self::cell_index(x, y)
     }
 
-    pub fn const_place_ship(
-        &mut self,
-        mut x: usize,
-        mut y: usize,
-        direction: Direction,
-        ship: Ship,
-    ) {
-        let (width, height) = match direction {
-            Direction::Horizontal => (ship.length() + 1, 2),
-            Direction::Vertical => (2, ship.length() + 1),
+    pub fn const_place_ship(&mut self, x: usize, y: usize, direction: Direction, ship: Ship) {
+        let offset = match direction {
+            Direction::Horizontal => ivec2(ship.length() as i32, 1),
+            Direction::Vertical => ivec2(1, ship.length() as i32),
         };
-        for i_y in y.saturating_sub(1)..y + height {
-            for i_x in x.saturating_sub(1)..x + width {
-                let index = Self::saturating_cell_index(i_x, i_y);
-                self.cells[index] = Cell::Protected;
-            }
-        }
+        let pos = ivec2(x as i32, y as i32);
+        self.for_each_rect_cells_mut(pos - IVec2::ONE, pos + offset, |cell| {
+            *cell = Cell::Protected
+        });
 
-        for _ in 0..ship.length() {
-            let index = Self::saturating_cell_index(x, y);
-            self.cells[index] = Cell::Ship;
-
-            match direction {
-                Direction::Horizontal => x += 1,
-                Direction::Vertical => y += 1,
-            }
-        }
+        let ship_offset = match direction {
+            Direction::Horizontal => ivec2(ship.length() as i32, 0),
+            Direction::Vertical => ivec2(0, ship.length() as i32),
+        };
+        self.for_each_rect_cells_mut(pos, pos + ship_offset, |cell| *cell = Cell::Ship);
     }
     pub const fn cell_index(x: usize, y: usize) -> usize {
         x + y * SIZE
@@ -223,9 +159,8 @@ impl Board {
                 Direction::Vertical => ivec2(0, ship.length() as i32 - 1),
             };
 
-        const MAX: IVec2 = IVec2::splat(SIZE as i32 - 1);
-        let protected_top_left = (top_left - IVec2::ONE).clamp(IVec2::ZERO, MAX);
-        let protected_bottom_right = (bottom_right + IVec2::ONE).clamp(IVec2::ZERO, MAX);
+        let protected_top_left = top_left - IVec2::ONE;
+        let protected_bottom_right = bottom_right + IVec2::ONE;
 
         let mut cell_count_protected = CellCount::new();
         self.for_each_rect_cells(protected_top_left, protected_bottom_right, |cell| {
@@ -246,15 +181,6 @@ impl Board {
             && allowable_hit_range.contains(&cell_count_ship[Cell::ShipHit])
             && only_protected[Cell::ShipHit] == 0; // would not use all ship hits
 
-        // println!(
-        //     "({}, {}, {}, {}, {})",
-        //     cell_count_ship[Cell::Protected],
-        //     cell_count_ship[Cell::Ship],
-        //     cell_count_ship[Cell::ShipHit],
-        //     only_protected[Cell::ShipHit],
-        //     is_allowed,
-        // );
-
         if !is_allowed {
             return None;
         }
@@ -268,12 +194,15 @@ impl Board {
         Some(this)
     }
     /// Maps a function over a rectangular area of the board. Bottom right is inclusive.
+    /// Clamps the cords to the size of the board.
     fn for_each_rect_cells_mut(
         &mut self,
         top_left: IVec2,
         bottom_right: IVec2,
         mut f: impl FnMut(&mut Cell),
     ) {
+        let top_left = top_left.clamp(IVec2::ZERO, MAX_POS);
+        let bottom_right = bottom_right.clamp(IVec2::ZERO, MAX_POS);
         for y in top_left.y..=bottom_right.y {
             for x in top_left.x..=bottom_right.x {
                 f(&mut self.cells[Self::cell_index(x as usize, y as usize)])
@@ -281,7 +210,10 @@ impl Board {
         }
     }
     /// Maps a function over a rectangular area of the board. Bottom right is inclusive.
+    /// Clamps the cords to the size of the board.
     fn for_each_rect_cells(&self, top_left: IVec2, bottom_right: IVec2, mut f: impl FnMut(&Cell)) {
+        let top_left = top_left.clamp(IVec2::ZERO, MAX_POS);
+        let bottom_right = bottom_right.clamp(IVec2::ZERO, MAX_POS);
         for y in top_left.y..=bottom_right.y {
             for x in top_left.x..=bottom_right.x {
                 f(&self.cells[Self::cell_index(x as usize, y as usize)])

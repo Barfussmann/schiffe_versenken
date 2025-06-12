@@ -19,18 +19,19 @@
 )]
 // #![allow(dead_code, clippy::new_without_default, unused, incomplete_features)]
 // #![warn(clippy::pedantic)]
-mod board;
 
 use board::Board;
 
-use crate::{board::Cell, ship::ShipCounts, solver::DynSolver};
+use crate::{ship::ShipCounts, solver::DynSolver};
 
 const SIZE: usize = 10;
 const BOARD_SIZE: usize = (SIZE * SIZE).next_multiple_of(64);
 
 mod bit_board;
 mod bit_iter;
+mod board;
 mod board_counts;
+mod cell;
 mod ship;
 mod solver;
 mod solver_render;

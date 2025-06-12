@@ -4,8 +4,9 @@ use crate::{
     SIZE,
     bit_board::{BitBoard, PlacedBitShips},
     bit_iter::BitIter,
-    board::{Board, Cell},
+    board::Board,
     board_counts::BoardCounts,
+    cell::Cell,
     ship::ShipCounts,
 };
 

@@ -1,7 +1,4 @@
-use crate::{
-    board::{Board, Cell},
-    ship::ShipCounts,
-};
+use crate::{board::Board, cell::Cell, ship::ShipCounts};
 use arrayvec::ArrayVec;
 use colorgrad::Gradient;
 use ratatui::{
