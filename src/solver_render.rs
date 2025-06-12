@@ -17,7 +17,8 @@ impl SolverRender {
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) {
         while !self.exit {
-            self.solver.step();
+            self.solver.calculate_board_counts();
+            println!("solver board_counts: {}", self.solver.arrangement_count());
             terminal.draw(|frame| self.draw(frame)).unwrap();
             self.handle_events()
         }
@@ -26,20 +27,19 @@ impl SolverRender {
     #[rustfmt::skip]
     fn draw(&self, frame: &mut ratatui::Frame) {
         match &self.solver.dyn_solver {
-            DynSolverEnum::Solver1(solver) => frame.render_widget(solver.board_counts.as_ref(), frame.area()),
-            DynSolverEnum::Solver2(solver) => frame.render_widget(solver.board_counts.as_ref(), frame.area()),
-            DynSolverEnum::Solver3(solver) => frame.render_widget(solver.board_counts.as_ref(), frame.area()),
-            DynSolverEnum::Solver4(solver) => frame.render_widget(solver.board_counts.as_ref(), frame.area()),
-            DynSolverEnum::Solver5(solver) => frame.render_widget(solver.board_counts.as_ref(), frame.area()),
+            DynSolverEnum::Solver1(solver) => frame.render_widget(solver.cell_hit_count.as_ref(), frame.area()),
+            DynSolverEnum::Solver2(solver) => frame.render_widget(solver.cell_hit_count.as_ref(), frame.area()),
+            DynSolverEnum::Solver3(solver) => frame.render_widget(solver.cell_hit_count.as_ref(), frame.area()),
+            DynSolverEnum::Solver4(solver) => frame.render_widget(solver.cell_hit_count.as_ref(), frame.area()),
+            DynSolverEnum::Solver5(solver) => frame.render_widget(solver.cell_hit_count.as_ref(), frame.area()),
         }
     }
 
     fn handle_events(&mut self) {
         match event::read().unwrap() {
             event::Event::Key(key_event) if key_event.kind == event::KeyEventKind::Press => {
-                match key_event.code {
-                    event::KeyCode::Char('q') => self.exit = true,
-                    _ => todo!(),
+                if let event::KeyCode::Char('q') = key_event.code {
+                    self.exit = true
                 }
             }
             _ => {}

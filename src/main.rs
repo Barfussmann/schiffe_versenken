@@ -21,6 +21,7 @@
 // #![warn(clippy::pedantic)]
 
 use board::Board;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{ship::ShipCounts, solver::DynSolver};
 
@@ -38,65 +39,27 @@ mod solver_render;
 mod utils;
 
 fn main() {
-    // rayon::ThreadPoolBuilder::new()
-    //     .num_threads(1)
-    //     .build_global()
-    //     .unwrap();
-
     // let mut terminal = ratatui::init();
     // let mut solver_render = solver_render::SolverRender::new(DynSolver::new(
     //     ShipCounts::new([1, 1, 2, 1]),
-    //     &Board::new(),
+    //     Board::new(),
     // ));
     // solver_render.run(&mut terminal);
     // ratatui::restore();
 
-    // let mut board = Board::new();
-    // board.cells[66] = Cell::Protected;
-    // let mut solver = DynSolver::new(ShipCounts::new([1, 1, 2, 1]), board);
-    // solver.step();
-    let mut solver = DynSolver::new(ShipCounts::new([1, 1, 2, 1]), Board::new());
-    solver.split_and_count();
+    // let mut solver = DynSolver::new(ShipCounts::new([1, 1, 2, 1]), Board::new());
+    // solver.split_and_count();
 
-    // board.
-
-    // for board in Solver::<1>::new(ShipCounts::new([1, 0, 0, 0]), board).run() {
-    // for (board, ship) in Solver::<1>::new(ShipCounts::new([1, 0, 0, 0]), board).run() {
-    //     // for board in Solver::<5>::new(ShipCounts::new([1, 1, 2, 1]), board).run() {
-    //     println!("{board}");
-    // }
-    // Solver::<1>::new(ShipCounts::new([1, 0, 0, 0]), board)
-    //     .run()
-    //     .count();
-
-    // for _ in 0..100 {
-    //     DynSolver::new(ShipCounts::new([1, 1, 2, 1]), &Board::new()).run();
-    // }
+    for _ in 0..100 {
+        DynSolver::new(ShipCounts::new([1, 1, 2, 1]), Board::new())
+            .calculate_board_counts_with_prints();
+    }
+    // rayon::ThreadPoolBuilder::new()
+    //     .num_threads(16)
+    //     .build_global()
+    //     .unwrap();
+    // (0..10000).into_par_iter().for_each(|_| {
+    //     DynSolver::new(ShipCounts::new([1, 1, 2, 1]), Board::new())
+    //         .calculate_board_counts_with_prints();
+    // });
 }
-
-// Solver::<1>::new(ShipCounts::new([0, 1, 0, 0]), Board::new()).run();
-// Solver::<1>::new(ShipCounts::new([0, 0, 1, 0]), Board::new()).run();
-// Solver::<1>::new(ShipCounts::new([0, 0, 0, 1]), Board::new()).run();
-
-// Solver::<2>::new(ShipCounts::new([1, 1, 0, 0]), Board::new()).run();
-// Solver::<2>::new(ShipCounts::new([1, 0, 1, 0]), Board::new()).run();
-// Solver::<2>::new(ShipCounts::new([0, 1, 1, 0]), Board::new()).run();
-// Solver::<2>::new(ShipCounts::new([0, 0, 2, 0]), Board::new()).run();
-// Solver::<2>::new(ShipCounts::new([1, 0, 0, 1]), Board::new()).run();
-// Solver::<2>::new(ShipCounts::new([0, 1, 0, 1]), Board::new()).run();
-// Solver::<2>::new(ShipCounts::new([0, 0, 1, 1]), Board::new()).run();
-
-// Solver::<3>::new(ShipCounts::new([1, 1, 1, 0]), Board::new()).run();
-// Solver::<3>::new(ShipCounts::new([1, 0, 2, 0]), Board::new()).run();
-// Solver::<3>::new(ShipCounts::new([0, 1, 2, 0]), Board::new()).run();
-// Solver::<3>::new(ShipCounts::new([1, 1, 0, 1]), Board::new()).run();
-// Solver::<3>::new(ShipCounts::new([1, 0, 1, 1]), Board::new()).run();
-// Solver::<3>::new(ShipCounts::new([0, 1, 1, 1]), Board::new()).run();
-// Solver::<3>::new(ShipCounts::new([0, 0, 2, 1]), Board::new()).run();
-
-// Solver::<4>::new(ShipCounts::new([1, 1, 2, 0]), Board::new()).run();
-// Solver::<4>::new(ShipCounts::new([1, 1, 1, 1]), Board::new()).run();
-// Solver::<4>::new(ShipCounts::new([1, 0, 2, 1]), Board::new()).run();
-// Solver::<4>::new(ShipCounts::new([0, 1, 2, 1]), Board::new()).run();
-
-// Solver::<5>::new(ShipCounts::new([1, 1, 2, 1]), Board::new()).run();

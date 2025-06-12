@@ -21,18 +21,16 @@ use std::{
 const BIT_FIELD_CHUNKS: usize = 255;
 
 #[derive(Debug, Clone)]
-pub struct ShipCellCounts<const N: usize> {
-    pub counts_per_ship_position: [CellCount; N],
+pub struct CellShipCounts<const N: usize> {
+    pub ship_count_per_cell: [CellCount; N],
 
-    bit_counts: [u64x4; 8],
     bit_counts_total: [u64x4; 32],
     bit_fields_to_sum: ArrayVec<u64x4, { BIT_FIELD_CHUNKS.next_power_of_two() * 2 }>,
 }
-impl<const N: usize> ShipCellCounts<N> {
+impl<const N: usize> CellShipCounts<N> {
     pub fn new() -> Self {
         Self {
-            counts_per_ship_position: std::array::from_fn(|_| CellCount::new()),
-            bit_counts: [u64x4::splat(0); 8],
+            ship_count_per_cell: std::array::from_fn(|_| CellCount::new()),
             bit_counts_total: [u64x4::splat(0); 32],
             bit_fields_to_sum: ArrayVec::new(),
         }
@@ -68,19 +66,8 @@ impl<const N: usize> ShipCellCounts<N> {
     }
     #[inline(never)]
     pub fn sum_bit_counts(&mut self) {
-        let last_counts = self.counts_per_ship_position.last_mut().unwrap();
+        let last_counts = self.ship_count_per_cell.last_mut().unwrap();
 
-        for bit_index in 0..self.bit_counts.len() {
-            let mul = 2usize.pow(bit_index as u32);
-            for i in 0..4 {
-                last_counts.position_counts[i] -=
-                    mask8x64::from_bitmask(self.bit_counts[bit_index][i])
-                        .to_int()
-                        .cast()
-                        * u32x64::splat(mul as u32);
-            }
-            self.bit_counts[bit_index] = u64x4::splat(0);
-        }
         for bit_index in 0..self.bit_counts_total.len() {
             let mul = 2usize.pow(bit_index as u32);
             for i in 0..4 {
@@ -192,18 +179,18 @@ fn bit_adder_with_carry<const N: usize>(
 }
 
 #[derive(Debug, Clone)]
-pub struct BoardCounts<const N: usize> {
-    pub counts: [u32; BOARD_SIZE],
-    pub board_count: u32,
-    pub ship_cell_counts: ShipCellCounts<N>,
+pub struct CellHitCount<const N: usize> {
+    pub counts: [u64; BOARD_SIZE],
+    pub board_count: u64,
+    pub ship_cell_counts: CellShipCounts<N>,
 }
 
-impl<const N: usize> BoardCounts<N> {
+impl<const N: usize> CellHitCount<N> {
     pub fn new() -> Self {
-        BoardCounts {
+        CellHitCount {
             counts: [0; BOARD_SIZE],
             board_count: 0,
-            ship_cell_counts: ShipCellCounts::new(),
+            ship_cell_counts: CellShipCounts::new(),
         }
     }
     pub fn add_board(&mut self, board: Board) {
@@ -234,16 +221,16 @@ impl<const N: usize> BoardCounts<N> {
         self.ship_cell_counts.sum_bit_counts();
         for (ship, cell_counts) in zip(
             ship_counts.iter_ships(),
-            &mut self.ship_cell_counts.counts_per_ship_position,
+            &mut self.ship_cell_counts.ship_count_per_cell,
         ) {
             let counts = cell_counts.counts();
             for i in 0..100 {
                 let ship_count_x = counts[i];
                 let ship_count_y = counts[i + 128];
                 for ship_i in 0..ship.length() {
-                    self.counts[i + ship_i] += ship_count_x;
+                    self.counts[i + ship_i] += ship_count_x as u64;
                     if i + ship_i * 10 < 128 {
-                        self.counts[i + ship_i * 10] += ship_count_y;
+                        self.counts[i + ship_i * 10] += ship_count_y as u64;
                     }
                 }
             }
@@ -271,7 +258,7 @@ impl<const N: usize> BoardCounts<N> {
         }))
     }
 }
-impl<const N: usize> Widget for &BoardCounts<N> {
+impl<const N: usize> Widget for &CellHitCount<N> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let title = Line::from("Ship hit probabilities".bold());
         let instructions = Line::from("Press 'q' to quit".bold());
@@ -289,7 +276,7 @@ impl<const N: usize> Widget for &BoardCounts<N> {
     }
 }
 
-impl<const N: usize> Display for BoardCounts<N> {
+impl<const N: usize> Display for CellHitCount<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_char('\n')?;
         for row in self.counts.chunks(SIZE).take(SIZE) {
