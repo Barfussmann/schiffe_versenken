@@ -21,6 +21,9 @@
 // #![warn(clippy::pedantic)]
 
 use board::Board;
+#[allow(unused_imports)]
+use num_format::{Locale, ToFormattedString};
+#[allow(unused_imports)]
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{ship::ShipCounts, solver::DynSolver};
@@ -39,27 +42,30 @@ mod solver_render;
 mod utils;
 
 fn main() {
-    // let mut terminal = ratatui::init();
-    // let mut solver_render = solver_render::SolverRender::new(DynSolver::new(
-    //     ShipCounts::new([1, 1, 2, 1]),
-    //     Board::new(),
-    // ));
-    // solver_render.run(&mut terminal);
-    // ratatui::restore();
+    // {
+    //     let mut terminal = ratatui::init();
+    //     let mut solver_render = solver_render::SolverRender::new(DynSolver::new(
+    //         ShipCounts::new([1, 1, 2, 1]),
+    //         Board::new(),
+    //     ));
+    //     solver_render.run(&mut terminal);
+    //     ratatui::restore();
+    // }
 
-    // let mut solver = DynSolver::new(ShipCounts::new([1, 1, 2, 1]), Board::new());
-    // solver.split_and_count();
-
-    for _ in 0..100 {
-        DynSolver::new(ShipCounts::new([1, 1, 2, 1]), Board::new())
-            .calculate_board_counts_with_prints();
+    let mut solvers = vec![DynSolver::new(ShipCounts::new([1, 1, 2, 1]), Board::new())];
+    let mut new_solvers = Vec::new();
+    for _ in 0..7 {
+        let mut total_arrangements = 0;
+        for mut solver in solvers.drain(..) {
+            println!("{}", solver.current_board);
+            total_arrangements += solver.calculate_arrangements();
+            println!("{}", solver.cell_hit_count_sum);
+            new_solvers.extend(solver.shoot(solver.get_best_cell()));
+        }
+        println!(
+            "total_arrangements: {:>14}",
+            total_arrangements.to_formatted_string(&Locale::en)
+        );
+        std::mem::swap(&mut solvers, &mut new_solvers);
     }
-    // rayon::ThreadPoolBuilder::new()
-    //     .num_threads(16)
-    //     .build_global()
-    //     .unwrap();
-    // (0..10000).into_par_iter().for_each(|_| {
-    //     DynSolver::new(ShipCounts::new([1, 1, 2, 1]), Board::new())
-    //         .calculate_board_counts_with_prints();
-    // });
 }

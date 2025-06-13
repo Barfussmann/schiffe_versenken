@@ -1,14 +1,16 @@
 use crossterm::event;
 use ratatui::DefaultTerminal;
 
-use crate::solver::{DynSolver, DynSolverEnum};
+use crate::solver::DynSolver;
 
 pub struct SolverRender {
     pub solver: DynSolver,
+
     pub exit: bool,
 }
 impl SolverRender {
-    pub fn new(solver: DynSolver) -> Self {
+    pub fn new(mut solver: DynSolver) -> Self {
+        solver.calculate_arrangements();
         Self {
             solver,
             exit: false,
@@ -17,8 +19,6 @@ impl SolverRender {
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) {
         while !self.exit {
-            self.solver.calculate_board_counts();
-            println!("solver board_counts: {}", self.solver.arrangement_count());
             terminal.draw(|frame| self.draw(frame)).unwrap();
             self.handle_events()
         }
@@ -26,20 +26,30 @@ impl SolverRender {
 
     #[rustfmt::skip]
     fn draw(&self, frame: &mut ratatui::Frame) {
-        match &self.solver.dyn_solver {
-            DynSolverEnum::Solver1(solver) => frame.render_widget(solver.cell_hit_count.as_ref(), frame.area()),
-            DynSolverEnum::Solver2(solver) => frame.render_widget(solver.cell_hit_count.as_ref(), frame.area()),
-            DynSolverEnum::Solver3(solver) => frame.render_widget(solver.cell_hit_count.as_ref(), frame.area()),
-            DynSolverEnum::Solver4(solver) => frame.render_widget(solver.cell_hit_count.as_ref(), frame.area()),
-            DynSolverEnum::Solver5(solver) => frame.render_widget(solver.cell_hit_count.as_ref(), frame.area()),
-        }
+        frame.render_widget(&self.solver, frame.area());
     }
 
     fn handle_events(&mut self) {
         match event::read().unwrap() {
             event::Event::Key(key_event) if key_event.kind == event::KeyEventKind::Press => {
-                if let event::KeyCode::Char('q') = key_event.code {
-                    self.exit = true
+                match key_event.code {
+                    event::KeyCode::Char('q') => self.exit = true,
+                    event::KeyCode::Char('u') => {
+                        self.solver.calculate_arrangements();
+                    }
+                    event::KeyCode::Char('i') => {
+                        self.solver = self.solver.shoot(self.solver.get_best_cell())[0].clone();
+                        self.solver.calculate_arrangements();
+                    }
+                    event::KeyCode::Char('a') => {
+                        self.solver = self.solver.shoot(self.solver.get_best_cell())[1].clone();
+                        self.solver.calculate_arrangements();
+                    }
+                    event::KeyCode::Char('e') => {
+                        self.solver = self.solver.shoot(self.solver.get_best_cell())[2].clone();
+                        self.solver.calculate_arrangements();
+                    }
+                    _ => (),
                 }
             }
             _ => {}

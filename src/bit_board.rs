@@ -55,7 +55,7 @@ impl<const N: usize> BitBoard<N> {
         self
     }
 }
-
+#[derive(Clone)]
 pub struct PlacedBitShips<const N: usize> {
     pub placed_ships: [[BitBoard<N>; 256]; N],
 }

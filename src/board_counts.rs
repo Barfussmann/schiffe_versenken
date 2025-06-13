@@ -1,13 +1,12 @@
-use crate::{board::Board, cell::Cell, ship::ShipCounts};
+use crate::{
+    board::{Direction, ShipPlacement},
+    ship::ShipCounts,
+};
 use arrayvec::ArrayVec;
 use colorgrad::Gradient;
 use ratatui::{
-    buffer::Buffer,
-    layout::Rect,
-    style::{Color, Style, Stylize, palette::material::BLACK},
-    symbols::border,
+    style::{Color, Style, palette::material::BLACK},
     text::{Line, Span, Text},
-    widgets::{Block, Paragraph, Widget},
 };
 
 use super::BOARD_SIZE;
@@ -41,9 +40,6 @@ impl<const N: usize> CellShipCounts<N> {
         unsafe {
             self.bit_fields_to_sum.push_unchecked(ship_positions);
         }
-        // if self.bit_fields_to_sum.len() == BIT_FIELD_CHUNKS {
-        //     self.sum_last_ship();
-        // }
 
         ship_positions.count_ones().reduce_sum() as u32
     }
@@ -177,41 +173,75 @@ fn bit_adder_with_carry<const N: usize>(
     res[N] = carry;
     res
 }
+#[derive(Clone)]
+pub struct CellHitCountSum {
+    pub counts: [u64; BOARD_SIZE],
+    pub arrangements: u64,
+}
+impl CellHitCountSum {
+    pub fn add(&mut self, other: &Self) {
+        for (self_count, other_count) in zip(&mut self.counts, &other.counts) {
+            *self_count += *other_count;
+        }
+        self.arrangements += other.arrangements;
+    }
+    pub fn add_single_placment(&mut self, ship_placement: ShipPlacement, count: u64) {
+        let start_index = ship_placement.pos.x as usize + ship_placement.pos.y as usize * SIZE;
+        let offset_mult = match ship_placement.direction {
+            Direction::Horizontal => 1,
+            Direction::Vertical => SIZE,
+        };
+        for offset in 0..ship_placement.ship.length() {
+            self.counts[start_index + offset * offset_mult] += count;
+        }
+    }
+    pub fn to_ratatui_text(&self) -> Text<'_> {
+        let max_val = *self.counts.iter().max().unwrap() as f32;
+
+        let color_grad = colorgrad::preset::rd_yl_gn();
+
+        Text::from_iter(self.counts.chunks(SIZE).take(SIZE).map(|row| {
+            Line::from_iter(row.iter().map(|count| {
+                let probability = *count as f32 / (self.arrangements as f32);
+                let color_scale = *count as f32 / max_val;
+                let rgba8 = color_grad.at(color_scale).to_rgba8();
+
+                Span::styled(
+                    format_args!("{:3.0}", probability * 1000.).to_string(),
+                    Style::default()
+                        .bg(Color::Rgb(rgba8[0], rgba8[1], rgba8[2]))
+                        .fg(BLACK),
+                )
+            }))
+        }))
+    }
+
+    pub fn new() -> Self {
+        Self {
+            counts: [0; BOARD_SIZE],
+            arrangements: 0,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct CellHitCount<const N: usize> {
-    pub counts: [u64; BOARD_SIZE],
-    pub board_count: u64,
     pub ship_cell_counts: CellShipCounts<N>,
 }
 
 impl<const N: usize> CellHitCount<N> {
     pub fn new() -> Self {
         CellHitCount {
-            counts: [0; BOARD_SIZE],
-            board_count: 0,
+            // counts: [0; BOARD_SIZE],
+            // board_count: 0,
             ship_cell_counts: CellShipCounts::new(),
         }
     }
-    pub fn add_board(&mut self, board: Board) {
-        for (count, cell) in zip(&mut self.counts, &board.cells) {
-            match cell {
-                Cell::Ship => {
-                    *count += 1;
-                }
-                Cell::Protected | Cell::Water | Cell::ShipHit => {}
-            }
-        }
-        self.board_count += 1;
-    }
-    pub fn add(mut self, other: Self) -> Self {
-        for (self_count, other_count) in zip(&mut self.counts, &other.counts) {
-            *self_count += *other_count;
-        }
-        self.board_count += other.board_count;
-        self
-    }
-    pub fn sum_cell_counts(&mut self, ship_counts: &ShipCounts) {
+    pub fn sum_cell_counts(
+        &mut self,
+        ship_counts: &ShipCounts,
+        cell_hit_count_sum: &mut CellHitCountSum,
+    ) {
         // add empty bit fields to sum the remaining bit fields
         for _ in 0..BIT_FIELD_CHUNKS - self.ship_cell_counts.bit_fields_to_sum.len() {
             self.ship_cell_counts
@@ -228,62 +258,25 @@ impl<const N: usize> CellHitCount<N> {
                 let ship_count_x = counts[i];
                 let ship_count_y = counts[i + 128];
                 for ship_i in 0..ship.length() {
-                    self.counts[i + ship_i] += ship_count_x as u64;
+                    cell_hit_count_sum.counts[i + ship_i] += ship_count_x as u64;
                     if i + ship_i * 10 < 128 {
-                        self.counts[i + ship_i * 10] += ship_count_y as u64;
+                        cell_hit_count_sum.counts[i + ship_i * 10] += ship_count_y as u64;
                     }
                 }
             }
             *cell_counts = CellCount::new();
         }
     }
-    pub fn to_ratatui_text(&self) -> Text<'_> {
-        let max_val = *self.counts.iter().max().unwrap() as f32;
-
-        let color_grad = colorgrad::preset::rd_yl_gn();
-
-        Text::from_iter(self.counts.chunks(SIZE).take(SIZE).map(|row| {
-            Line::from_iter(row.iter().map(|count| {
-                let probability = *count as f32 / (self.board_count as f32);
-                let color_scale = *count as f32 / max_val;
-                let rgba8 = color_grad.at(color_scale).to_rgba8();
-
-                Span::styled(
-                    format_args!("{:3.0}", probability * 1000.).to_string(),
-                    Style::default()
-                        .bg(Color::Rgb(rgba8[0], rgba8[1], rgba8[2]))
-                        .fg(BLACK),
-                )
-            }))
-        }))
-    }
-}
-impl<const N: usize> Widget for &CellHitCount<N> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        let title = Line::from("Ship hit probabilities".bold());
-        let instructions = Line::from("Press 'q' to quit".bold());
-        let block = Block::bordered()
-            .title(title.centered())
-            .title_bottom(instructions.centered())
-            .border_set(border::THICK);
-
-        let probs = self.to_ratatui_text();
-
-        Paragraph::new(probs)
-            .centered()
-            .block(block)
-            .render(area, buf);
-    }
 }
 
-impl<const N: usize> Display for CellHitCount<N> {
+impl Display for CellHitCountSum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_char('\n')?;
         for row in self.counts.chunks(SIZE).take(SIZE) {
             for count in row {
                 let counts = *count as f32;
-                let probability = counts / (self.board_count as f32);
-                f.write_fmt(format_args!("{:3.1} ", probability * 100.))?;
+                let probability = counts / (self.arrangements as f32);
+                f.write_fmt(format_args!("{:3.0} ", probability * 100.))?;
             }
             f.write_char('\n')?;
         }

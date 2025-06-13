@@ -9,9 +9,10 @@ use core::iter::Iterator;
 use core::simd::u64x4;
 use std::fmt::Display;
 use std::fmt::Write;
+use std::ops::{Index, IndexMut};
 use std::simd::u64x2;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
     Horizontal = 0,
     Vertical = 1,
@@ -19,23 +20,31 @@ pub enum Direction {
 
 enum PlacementResult {
     NotAllowed,
-    NoShipHitCovering((Board, Ship)),
-    PartialShipHitCovering((Board, Ship)),
-    FullShipHitCovering((Board, Ship)),
+    NoShipHitCovering(ShipPlacement),
+    PartialShipHitCovering(ShipPlacement),
+    FullShipHitCovering(ShipPlacement),
+}
+pub struct ShipPlacement {
+    pub ship: Ship,
+    pub pos: IVec2,
+    pub placed_board: Board,
+    pub direction: Direction,
 }
 pub struct AllShipPlacment {
-    pub partial_ship_hit_covering: Vec<(Board, Ship)>,
-    pub full_ship_hit_covering: Vec<(Board, Ship)>,
+    pub partial_ship_hit_covering: Vec<ShipPlacement>,
+    pub full_ship_hit_covering: Vec<ShipPlacement>,
 }
 impl AllShipPlacment {
     fn add_placement_result(&mut self, placement_result: PlacementResult) {
         match placement_result {
             PlacementResult::NotAllowed => {}
             PlacementResult::NoShipHitCovering(_) => {}
-            PlacementResult::PartialShipHitCovering(board) => {
-                self.partial_ship_hit_covering.push(board)
+            PlacementResult::PartialShipHitCovering(ship_place) => {
+                self.partial_ship_hit_covering.push(ship_place)
             }
-            PlacementResult::FullShipHitCovering(board) => self.full_ship_hit_covering.push(board),
+            PlacementResult::FullShipHitCovering(ship_place) => {
+                self.full_ship_hit_covering.push(ship_place)
+            }
         }
     }
 }
@@ -59,7 +68,9 @@ impl Board {
             *cell = match cell {
                 // Cell::Ship => Cell::Protected,
                 // _ => Cell::Water,
-                Cell::ShipHit | Cell::Ship | Cell::Protected => Cell::Protected,
+                Cell::Ship | Cell::Protected => Cell::Protected,
+                // Cell::ShipHit | Cell::Ship | Cell::Protected => Cell::Protected,
+                Cell::ShipHit => panic!("not covered ship hit in bitboard"),
                 Cell::Water => Cell::Water,
             };
         }
@@ -79,8 +90,8 @@ impl Board {
             IVec2::ZERO,
             ivec2((SIZE - (S.length() - 1)) as i32, SIZE as i32),
         ) {
-            x_mask.cells[Board::cell_index(pos)] = Cell::Protected;
-            y_mask.cells[Board::cell_index(pos.yx())] = Cell::Protected;
+            x_mask[pos] = Cell::Protected;
+            y_mask[pos.yx()] = Cell::Protected;
         }
         let x = !x_shifted & x_mask.to_u64x2(Cell::Protected);
         let y = !y_shifted & y_mask.to_u64x2(Cell::Protected);
@@ -130,9 +141,6 @@ impl Board {
         };
         self.for_each_rect_cells_mut(pos, pos + ship_offset, |cell| *cell = Cell::Ship);
     }
-    pub const fn cell_index(pos: IVec2) -> usize {
-        pos.x as usize + pos.y as usize * SIZE
-    }
     pub fn all_ship_placements(&self, ship_counts: &ShipCounts) -> AllShipPlacment {
         let mut all_ship_placement = AllShipPlacment {
             partial_ship_hit_covering: Vec::new(),
@@ -150,6 +158,11 @@ impl Board {
                 }
             }
         }
+        all_ship_placement
+            .full_ship_hit_covering
+            .dedup_by_key(|a| (a.pos, a.ship, a.direction));
+
+        assert!(all_ship_placement.full_ship_hit_covering.len() <= 1);
         all_ship_placement
     }
     fn try_place_ship(&self, ship: Ship, pos: IVec2, direction: Direction) -> PlacementResult {
@@ -176,12 +189,8 @@ impl Board {
 
         let only_protected = cell_count_protected - cell_count_ship;
 
-        let allowable_hit_range = 1..ship.length() as u64; // Needs atleast one hit to be placed and if it's only hits it is'nt usefull
-
-        let is_allowed = cell_count_ship[Cell::Protected] == 0         // would be placed on protected cells
-            && cell_count_ship[Cell::Ship] == 0                        // would be placed on ship cells
-            && allowable_hit_range.contains(&cell_count_ship[Cell::ShipHit])
-            // && allowable_hit_range.contains(&cell_count_ship[Cell::ShipHit])
+        let is_allowed = cell_count_ship[Cell::Water] + cell_count_ship[Cell::ShipHit] == ship.length() as u64
+            // only allow to be placed on water or ship hits
             && only_protected[Cell::ShipHit] == 0; // would not use all ship hits
 
         if !is_allowed {
@@ -194,12 +203,19 @@ impl Board {
         });
         this.for_each_rect_cells_mut(top_left, bottom_right, |cell| *cell = Cell::Ship);
 
+        let ship_placement = ShipPlacement {
+            ship,
+            pos,
+            direction,
+            placed_board: this,
+        };
+
         if cell_count_ship[Cell::ShipHit] == 0 {
-            PlacementResult::NoShipHitCovering((this, ship))
+            PlacementResult::NoShipHitCovering(ship_placement)
         } else if (cell_count_ship[Cell::ShipHit] as usize) < ship.length() {
-            PlacementResult::PartialShipHitCovering((this, ship))
+            PlacementResult::PartialShipHitCovering(ship_placement)
         } else {
-            PlacementResult::FullShipHitCovering((this, ship))
+            PlacementResult::FullShipHitCovering(ship_placement)
         }
     }
     /// Maps a function over a rectangular area of the board. Bottom right is inclusive.
@@ -211,18 +227,30 @@ impl Board {
         mut f: impl FnMut(&mut Cell),
     ) {
         for pos in rect_iter(top_left, bottom_right + IVec2::ONE) {
-            f(&mut self.cells[Self::cell_index(pos)])
+            f(&mut self[pos])
         }
     }
     /// Maps a function over a rectangular area of the board. Bottom right is inclusive.
     /// Clamps the cords to the size of the board.
     fn for_each_rect_cells(&self, top_left: IVec2, bottom_right: IVec2, mut f: impl FnMut(&Cell)) {
         for pos in rect_iter(top_left, bottom_right + IVec2::ONE) {
-            f(&self.cells[Self::cell_index(pos)])
+            f(&self[pos])
         }
     }
     pub fn to_bitboard<const N: usize>(&self, ship_counts: ShipCounts) -> BitBoard<N> {
         BitBoard::new(self, ship_counts)
+    }
+}
+impl Index<IVec2> for Board {
+    type Output = Cell;
+
+    fn index(&self, index: IVec2) -> &Self::Output {
+        &self.cells[index.x as usize + index.y as usize * SIZE]
+    }
+}
+impl IndexMut<IVec2> for Board {
+    fn index_mut(&mut self, index: IVec2) -> &mut Self::Output {
+        &mut self.cells[index.x as usize + index.y as usize * SIZE]
     }
 }
 

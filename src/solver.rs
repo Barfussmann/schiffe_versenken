@@ -1,16 +1,25 @@
 use glam::IVec2;
-use num_format::{Locale, ToFormattedString};
+use num_format::ToFormattedString;
+use ratatui::{
+    buffer::Buffer,
+    layout::Rect,
+    style::Stylize,
+    symbols::border,
+    text::Line,
+    widgets::{Block, Paragraph, Widget},
+};
 
 use crate::{
     SIZE,
     bit_board::{BitBoard, PlacedBitShips},
     bit_iter::BitIter,
     board::Board,
-    board_counts::CellHitCount,
+    board_counts::{CellHitCount, CellHitCountSum},
     cell::Cell,
     ship::ShipCounts,
 };
 
+#[derive(Clone)]
 pub enum DynSolverEnum {
     Solver1(Solver<1>),
     Solver2(Solver<2>),
@@ -18,97 +27,160 @@ pub enum DynSolverEnum {
     Solver4(Solver<4>),
     Solver5(Solver<5>),
 }
+#[derive(Clone)]
 pub struct DynSolver {
-    pub dyn_solver: DynSolverEnum,
+    // pub dyn_solver: DynSolverEnum,
     pub current_board: Board,
+    pub cell_hit_count_sum: CellHitCountSum,
     pub ship_counts: ShipCounts,
 }
 impl DynSolver {
     pub fn new(ship_counts: ShipCounts, board: Board) -> Self {
-        let dyn_solver = match ship_counts.total_ship_count() {
-            1 => DynSolverEnum::Solver1(Solver::new(ship_counts, &board)),
-            2 => DynSolverEnum::Solver2(Solver::new(ship_counts, &board)),
-            3 => DynSolverEnum::Solver3(Solver::new(ship_counts, &board)),
-            4 => DynSolverEnum::Solver4(Solver::new(ship_counts, &board)),
-            5 => DynSolverEnum::Solver5(Solver::new(ship_counts, &board)),
-            count => unreachable!("Only 1 to 5 Ships are allowed. Is {count}"),
-        };
         Self {
-            dyn_solver,
             current_board: board,
             ship_counts,
-            // board_counts: 0,
+            cell_hit_count_sum: CellHitCountSum::new(),
+        }
+    }
+    fn gen_dyn_solver(&self) -> DynSolverEnum {
+        match self.ship_counts.total_ship_count() {
+            1 => DynSolverEnum::Solver1(Solver::new(self.ship_counts, &self.current_board)),
+            2 => DynSolverEnum::Solver2(Solver::new(self.ship_counts, &self.current_board)),
+            3 => DynSolverEnum::Solver3(Solver::new(self.ship_counts, &self.current_board)),
+            4 => DynSolverEnum::Solver4(Solver::new(self.ship_counts, &self.current_board)),
+            5 => DynSolverEnum::Solver5(Solver::new(self.ship_counts, &self.current_board)),
+            count => unreachable!("Only 1 to 5 Ships are allowed. Is {count}"),
         }
     }
     pub fn reset(&mut self) {
         *self = Self::new(self.ship_counts, Board::new());
     }
-    pub fn calculate_board_counts(&mut self) {
-        match &mut self.dyn_solver {
-            DynSolverEnum::Solver1(solver) => solver.step(&self.ship_counts),
-            DynSolverEnum::Solver2(solver) => solver.step(&self.ship_counts),
-            DynSolverEnum::Solver3(solver) => solver.step(&self.ship_counts),
-            DynSolverEnum::Solver4(solver) => solver.step(&self.ship_counts),
-            DynSolverEnum::Solver5(solver) => solver.step(&self.ship_counts),
+    /// returns the arrangement count
+    #[rustfmt::skip]
+    pub fn step_solver(&mut self) {
+        match &mut self.gen_dyn_solver() {
+            DynSolverEnum::Solver1(solver) => solver.step(&self.ship_counts, &mut self.cell_hit_count_sum),
+            DynSolverEnum::Solver2(solver) => solver.step(&self.ship_counts, &mut self.cell_hit_count_sum),
+            DynSolverEnum::Solver3(solver) => solver.step(&self.ship_counts, &mut self.cell_hit_count_sum),
+            DynSolverEnum::Solver4(solver) => solver.step(&self.ship_counts, &mut self.cell_hit_count_sum),
+            DynSolverEnum::Solver5(solver) => solver.step(&self.ship_counts, &mut self.cell_hit_count_sum),
         };
     }
-    pub fn calculate_board_counts_with_prints(&mut self) {
+    pub fn calculate_arrangements_with_print(&mut self) -> u64 {
         let start_time = std::time::Instant::now();
 
-        self.calculate_board_counts();
+        let total_arrangements = self.calculate_arrangements();
         let elapsed_time = start_time.elapsed();
-        let boards_per_second =
-            (self.arrangement_count() as f64 / elapsed_time.as_secs_f64()) as u64;
+        let boards_per_second = (total_arrangements as f64 / elapsed_time.as_secs_f64()) as u64;
         println!(
             "in: {elapsed_time:>8.2?}, possibilities: {:>12}, calculated: {:12} hz",
-            self.arrangement_count()
-                .to_formatted_string(&num_format::Locale::en),
+            total_arrangements.to_formatted_string(&num_format::Locale::en),
             boards_per_second.to_formatted_string(&num_format::Locale::en)
         );
+        total_arrangements
     }
-    pub fn split_and_count(&mut self) {
-        self.current_board.cells[44] = Cell::ShipHit;
-        *self = DynSolver::new(self.ship_counts, self.current_board.clone());
+    pub fn shoot(&self, shoot: IVec2) -> Vec<Self> {
+        // let mut hit_allowed = true;
+        let mut miss_allowed = true;
+        let own_ship_placments = self.current_board.all_ship_placements(&self.ship_counts);
+        if !own_ship_placments.partial_ship_hit_covering.is_empty() {
+            miss_allowed = own_ship_placments
+                .partial_ship_hit_covering
+                .iter()
+                .any(|placment| placment.placed_board[shoot] == Cell::Protected);
+        }
 
-        self.calculate_board_counts_with_prints();
-        let mut total = self.arrangement_count();
+        assert!(self.current_board[shoot] == Cell::Water);
+        let mut hit_board = self.clone();
+        hit_board.current_board[shoot] = Cell::ShipHit;
 
-        for (sub_board, placed_ship) in self
+        let full_ship_hit_coverings = hit_board
             .current_board
             .all_ship_placements(&self.ship_counts)
-            .partial_ship_hit_covering
+            .full_ship_hit_covering
+            .into_iter()
+            .map(|ship_placment| {
+                DynSolver::new(
+                    self.ship_counts.remove_placed_ship(ship_placment.ship),
+                    ship_placment.placed_board,
+                )
+            });
+
+        let mut miss_board = self.clone();
+        miss_board.current_board[shoot] = Cell::Protected;
+
+        // let mut sub_solver =
+        let mut sub_solvers = vec![DynSolver::new(
+            hit_board.ship_counts,
+            hit_board.current_board.clone(),
+        )];
+        if miss_allowed {
+            sub_solvers.push(DynSolver::new(
+                miss_board.ship_counts,
+                miss_board.current_board.clone(),
+            ))
+        }
+        sub_solvers.extend(full_ship_hit_coverings);
+
+        sub_solvers
+    }
+
+    pub fn calculate_arrangements(&mut self) -> u64 {
+        let all_ship_placements = self.current_board.all_ship_placements(&self.ship_counts);
+        if all_ship_placements.partial_ship_hit_covering.is_empty()
+            && all_ship_placements.full_ship_hit_covering.is_empty()
         {
-            println!("length: {}", placed_ship.length());
-            let new_ship_counts = self.ship_counts.remove_placed_ship(placed_ship);
-            let mut solver = DynSolver::new(new_ship_counts, sub_board);
-            solver.calculate_board_counts_with_prints();
-            let sub_count = solver.arrangement_count();
-            total += sub_count;
+            self.step_solver();
         }
-        println!("total: {}", total.to_formatted_string(&Locale::en));
-        self.reset();
-        self.calculate_board_counts_with_prints();
+        for ship_placement in all_ship_placements.partial_ship_hit_covering {
+            for cell in ship_placement.placed_board.cells {
+                assert!(cell != Cell::ShipHit);
+            }
+            let mut solver = DynSolver::new(
+                self.ship_counts.remove_placed_ship(ship_placement.ship),
+                ship_placement.placed_board.clone(),
+            );
+            solver.step_solver();
+            self.cell_hit_count_sum.add(&solver.cell_hit_count_sum);
+            self.cell_hit_count_sum
+                .add_single_placment(ship_placement, solver.cell_hit_count_sum.arrangements);
+        }
+        self.cell_hit_count_sum.arrangements
     }
-    fn get_best_cell(&self) -> IVec2 {
-        match &self.dyn_solver {
-            DynSolverEnum::Solver1(solver) => solver.get_best_water_cell(),
-            DynSolverEnum::Solver2(solver) => solver.get_best_water_cell(),
-            DynSolverEnum::Solver3(solver) => solver.get_best_water_cell(),
-            DynSolverEnum::Solver4(solver) => solver.get_best_water_cell(),
-            DynSolverEnum::Solver5(solver) => solver.get_best_water_cell(),
-        }
+    pub fn get_best_cell(&self) -> IVec2 {
+        let max_index = self
+            .current_board
+            .cells
+            .iter()
+            .zip(&self.cell_hit_count_sum.counts)
+            .enumerate()
+            .filter(|(_, (cell, _))| **cell == Cell::Water)
+            .max_by_key(|(_, (_, count))| **count)
+            .unwrap()
+            .0;
+        assert!(max_index < 100, "Index was: {max_index}");
+        IVec2::new((max_index % SIZE) as i32, (max_index / SIZE) as i32)
     }
-    pub fn arrangement_count(&self) -> u64 {
-        match &self.dyn_solver {
-            DynSolverEnum::Solver1(solver) => solver.cell_hit_count.board_count,
-            DynSolverEnum::Solver2(solver) => solver.cell_hit_count.board_count,
-            DynSolverEnum::Solver3(solver) => solver.cell_hit_count.board_count,
-            DynSolverEnum::Solver4(solver) => solver.cell_hit_count.board_count,
-            DynSolverEnum::Solver5(solver) => solver.cell_hit_count.board_count,
-        }
+}
+impl Widget for &DynSolver {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let title = Line::from("Ship hit probabilities".bold());
+        let instructions = Line::from("Press 'q' to quit".bold());
+        let block = Block::bordered()
+            .title(title.centered())
+            .title_bottom(instructions.centered())
+            .border_set(border::THICK);
+
+        let probs = self.cell_hit_count_sum.to_ratatui_text();
+
+        Paragraph::new(probs)
+            .centered()
+            .block(block)
+            .render(area, buf);
     }
 }
 
+#[derive(Clone)]
 pub struct Solver<const N: usize> {
     pub placed_bit_ships: Box<PlacedBitShips<N>>,
     bit_board: BitBoard<N>,
@@ -123,52 +195,11 @@ impl<const N: usize> Solver<N> {
             cell_hit_count: Box::new(CellHitCount::new()),
         }
     }
-    /// returns the count of different boards
-    fn step(&mut self, ship_counts: &ShipCounts) -> u64 {
-        self.cell_hit_count.board_count = self.place_ship_recursive::<0>(self.bit_board) as u64;
-        self.cell_hit_count.sum_cell_counts(ship_counts);
-        self.cell_hit_count.board_count as u64
-    }
-    pub fn get_best_cell(&mut self, ship_counts: &ShipCounts) {
-        let start_time = std::time::Instant::now();
-        self.step(ship_counts);
-
-        let pos = self.get_best_water_cell();
-
-        let elapsed_time = start_time.elapsed();
-        let boards_per_second =
-            (self.cell_hit_count.board_count as f64 / elapsed_time.as_secs_f64()) as u64;
-        println!(
-            "in: {elapsed_time:7.3?}, possibilities: {:12}, calculated: {:12} hz",
-            self.cell_hit_count
-                .board_count
-                .to_formatted_string(&num_format::Locale::en),
-            boards_per_second.to_formatted_string(&num_format::Locale::en)
-        );
-        println!(
-            "Average placed ships: {}",
-            self.cell_hit_count.counts.iter().sum::<u64>() as f64
-                / self.cell_hit_count.board_count as f64
-        );
-
-        println!(
-            "Max (x, y): ({}, {})",
-            (pos.x as u8 + b'A') as char,
-            pos.y + 1
-        );
-    }
-
-    fn get_best_water_cell(&self) -> IVec2 {
-        let max_index = self
-            .cell_hit_count
-            .counts
-            .iter()
-            .enumerate()
-            .max_by_key(|(_, count)| **count)
-            .unwrap()
-            .0;
-        // assert!(self.current_board.cells[max_index] == Cell::Water); ToDo reimplement this
-        IVec2::new((max_index % SIZE) as i32, (max_index / SIZE) as i32)
+    /// returns the count of arrangement count
+    fn step(&mut self, ship_counts: &ShipCounts, cell_count_hit_sum: &mut CellHitCountSum) {
+        cell_count_hit_sum.arrangements = self.place_ship_recursive::<0>(self.bit_board) as u64;
+        self.cell_hit_count
+            .sum_cell_counts(ship_counts, cell_count_hit_sum);
     }
 
     #[inline(always)]
