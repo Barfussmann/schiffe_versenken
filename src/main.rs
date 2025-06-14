@@ -52,19 +52,21 @@ fn main() {
     //     ratatui::restore();
     // }
 
-    let mut solvers = vec![DynSolver::new(ShipCounts::new([1, 1, 2, 1]), Board::new())];
+    let mut solvers = vec![DynSolver::new(ShipCounts::new([1, 1, 1, 1]), Board::new())];
     let mut new_solvers = Vec::new();
-    for _ in 0..7 {
+    for _ in 0..10 {
+        let start_time = std::time::Instant::now();
         let mut total_arrangements = 0;
         for mut solver in solvers.drain(..) {
-            println!("{}", solver.current_board);
+            // println!("{}", solver.current_board);
             total_arrangements += solver.calculate_arrangements();
-            println!("{}", solver.cell_hit_count_sum);
+            // println!("{}", solver.cell_hit_count_sum);
             new_solvers.extend(solver.shoot(solver.get_best_cell()));
         }
         println!(
-            "total_arrangements: {:>14}",
-            total_arrangements.to_formatted_string(&Locale::en)
+            "total_arrangements: {:>14}, in: {:>8.1?}",
+            total_arrangements.to_formatted_string(&Locale::en),
+            start_time.elapsed(),
         );
         std::mem::swap(&mut solvers, &mut new_solvers);
     }

@@ -1,4 +1,5 @@
 use core::simd::u64x4;
+use std::sync::LazyLock;
 
 use crate::ship::{Ship, ShipCounts};
 use crate::{
@@ -55,32 +56,99 @@ impl<const N: usize> BitBoard<N> {
         self
     }
 }
-#[derive(Clone)]
 pub struct PlacedBitShips<const N: usize> {
     pub placed_ships: [[BitBoard<N>; 256]; N],
 }
-impl<const N: usize> PlacedBitShips<N> {
-    pub fn new(ship_counts: ShipCounts) -> Self {
-        let placed_ships = ship_counts
-            .iter_ships()
-            .map(|ship| {
-                let mut placed_ships = [Board::new().to_bitboard(ship_counts); 256];
-                for dir in [Direction::Horizontal, Direction::Vertical] {
-                    for y in 0..SIZE {
-                        for x in 0..SIZE {
-                            let bit_board_index = dir as usize * 128 + (y * 10 + x);
-                            let mut board = Board::new();
-                            board.const_place_ship(x, y, dir, ship);
+impl PlacedBitShips<1> {
+    pub fn new(ship_counts: ShipCounts) -> &'static Self {
+        static LOOKUP: LazyLock<Vec<(ShipCounts, PlacedBitShips<1>)>> =
+            LazyLock::new(PlacedBitShips::gen_lookup);
+        &LOOKUP
+            .iter()
+            .find(|(cached_ship_count, _)| *cached_ship_count == ship_counts)
+            .unwrap()
+            .1
+    }
+}
+impl PlacedBitShips<2> {
+    pub fn new(ship_counts: ShipCounts) -> &'static Self {
+        static LOOKUP: LazyLock<Vec<(ShipCounts, PlacedBitShips<2>)>> =
+            LazyLock::new(PlacedBitShips::gen_lookup);
+        &LOOKUP
+            .iter()
+            .find(|(cached_ship_count, _)| *cached_ship_count == ship_counts)
+            .unwrap()
+            .1
+    }
+}
+impl PlacedBitShips<3> {
+    pub fn new(ship_counts: ShipCounts) -> &'static Self {
+        static LOOKUP: LazyLock<Vec<(ShipCounts, PlacedBitShips<3>)>> =
+            LazyLock::new(PlacedBitShips::gen_lookup);
+        &LOOKUP
+            .iter()
+            .find(|(cached_ship_count, _)| *cached_ship_count == ship_counts)
+            .unwrap()
+            .1
+    }
+}
+impl PlacedBitShips<4> {
+    pub fn new(ship_counts: ShipCounts) -> &'static Self {
+        static LOOKUP: LazyLock<Vec<(ShipCounts, PlacedBitShips<4>)>> =
+            LazyLock::new(PlacedBitShips::gen_lookup);
+        &LOOKUP
+            .iter()
+            .find(|(cached_ship_count, _)| *cached_ship_count == ship_counts)
+            .unwrap()
+            .1
+    }
+}
+impl PlacedBitShips<5> {
+    pub fn new(ship_counts: ShipCounts) -> &'static Self {
+        static LOOKUP: LazyLock<Vec<(ShipCounts, PlacedBitShips<5>)>> =
+            LazyLock::new(PlacedBitShips::gen_lookup);
+        &LOOKUP
+            .iter()
+            .find(|(cached_ship_count, _)| *cached_ship_count == ship_counts)
+            .unwrap()
+            .1
+    }
+}
 
-                            placed_ships[bit_board_index] = BitBoard::new(&board, ship_counts);
+impl<const N: usize> PlacedBitShips<N> {
+    // #[rustfmt::skip]
+    // pub fn new(ship_counts: ShipCounts) -> Self {
+    //     Self::gen_self(ship_counts)
+    // }
+    //
+    fn gen_lookup() -> Vec<(ShipCounts, Self)> {
+        ShipCounts::all_possible_ship_counts()
+            .filter(|ship_counts| ship_counts.total_ship_count() == N)
+            .map(|ship_counts| (ship_counts, Self::gen_self(ship_counts)))
+            .collect()
+    }
+    fn gen_self(ship_counts: ShipCounts) -> Self {
+        Self {
+            placed_ships: ship_counts
+                .iter_ships()
+                .map(|ship| {
+                    let mut placed_ships = [Board::new().to_bitboard(ship_counts); 256];
+                    for dir in [Direction::Horizontal, Direction::Vertical] {
+                        for y in 0..SIZE {
+                            for x in 0..SIZE {
+                                let bit_board_index = dir as usize * 128 + (y * 10 + x);
+                                let mut board = Board::new();
+                                board.const_place_ship(x, y, dir, ship);
+
+                                placed_ships[bit_board_index] = BitBoard::new(&board, ship_counts);
+                            }
                         }
                     }
-                }
-                placed_ships
-            })
-            .collect::<Vec<_>>();
-        PlacedBitShips {
-            placed_ships: placed_ships.try_into().unwrap(),
+                    placed_ships
+                })
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap(),
         }
     }
 }
