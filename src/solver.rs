@@ -88,7 +88,9 @@ impl DynSolver {
         assert!(self.board[shot] == Cell::Water);
         let mut hit_board = self.clone();
         hit_board.board[shot] = Cell::ShipHit;
-        let hit_placements = hit_board.board.all_ship_placements(&self.ship_counts);
+        let hit_placements = hit_board
+            .board
+            .all_ship_placements_hit_position(&self.ship_counts, shot);
 
         if self.board.has_ship_hits() {
             if hit_placements.partial_ship_hit_covering.is_empty() {
@@ -154,7 +156,9 @@ impl DynSolver {
             (first_hit_index % SIZE) as i32,
             (first_hit_index / SIZE) as i32,
         );
-        let all_ship_placements = self.board.all_ship_placements(&self.ship_counts);
+        let all_ship_placements = self
+            .board
+            .all_ship_placements_hit_position(&self.ship_counts, firt_hit_pos);
         if print {
             dbg!(all_ship_placements.partial_ship_hit_covering.len());
             dbg!(all_ship_placements.full_ship_hit_covering.len());
@@ -166,9 +170,6 @@ impl DynSolver {
 
             if ship_placement.board.has_ship_hits() {
                 let mut solver = self.place_ship(&ship_placement);
-                if !solver.board.is_possible(&solver.ship_counts) {
-                    continue;
-                }
                 solver.calculate_arrangements(print);
                 self.cell_hit_count_sum.add(&solver.cell_hit_count_sum);
                 self.cell_hit_count_sum.add_single_placment(

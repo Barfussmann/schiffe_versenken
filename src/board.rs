@@ -20,6 +20,7 @@ pub enum Direction {
     Vertical = 1,
 }
 impl Direction {
+    const ALL: [Direction; 2] = [Direction::Horizontal, Direction::Vertical];
     pub fn to_ivec2(self) -> IVec2 {
         match self {
             Direction::Horizontal => ivec2(1, 0),
@@ -166,49 +167,31 @@ impl Board {
         };
         self.for_each_rect_cells_mut(pos, pos + ship_offset, |cell| *cell = Cell::Ship);
     }
-    pub fn all_ship_placements(&self, ship_counts: &ShipCounts) -> AllShipPlacment {
+    pub fn all_ship_placements_hit_position(
+        &self,
+        ship_counts: &ShipCounts,
+        hit_position: IVec2,
+    ) -> AllShipPlacment {
         let mut all_ship_placement = AllShipPlacment {
             partial_ship_hit_covering: Vec::new(),
             full_ship_hit_covering: Vec::new(),
         };
-        for ship in ship_counts.iter_ships().collect::<Vec<_>>() {
-            for pos in rect_iter(IVec2::ZERO, IVec2::splat(SIZE as i32)) {
-                if pos.x as usize + ship.length() <= SIZE {
+        for ship in ship_counts.iter_ships() {
+            for offset in 0..ship.length() {
+                // for dir in Direction::ALL {
+                let pos = hit_position - Direction::Horizontal.to_ivec2() * offset as i32;
+                if pos.x >= 0 && pos.x as usize + ship.length() <= SIZE {
                     let placement_result = self.try_place_ship(ship, pos, Direction::Horizontal);
                     all_ship_placement.add_placement_result(placement_result);
                 }
-                if pos.y as usize + ship.length() <= SIZE {
+                let pos = hit_position - Direction::Vertical.to_ivec2() * offset as i32;
+                if pos.y >= 0 && pos.y as usize + ship.length() <= SIZE {
                     let placement_result = self.try_place_ship(ship, pos, Direction::Vertical);
                     all_ship_placement.add_placement_result(placement_result);
                 }
             }
         }
-        if all_ship_placement.full_ship_hit_covering.len() > 1 {
-            // println!("before: {self}");
-            // for covering in &all_ship_placement.full_ship_hit_covering {
-            //     println!("covering: {}", covering.placed_board);
-            // }
-        }
-        // assert!(all_ship_placement.full_ship_hit_covering.len() <= 1);
         all_ship_placement
-    }
-    pub fn is_possible(&self, ship_counts: &ShipCounts) -> bool {
-        if !self.has_ship_hits() {
-            return true;
-        }
-        let all_ship_placements = self.all_ship_placements(ship_counts);
-        all_ship_placements
-            .partial_ship_hit_covering
-            .into_iter()
-            // all_ship_placements
-            //     .full_ship_hit_covering
-            //     .into_iter()
-            //     .chain(all_ship_placements.partial_ship_hit_covering)
-            .any(|placement| {
-                placement
-                    .board
-                    .is_possible(&ship_counts.remove_placed_ship(placement.ship))
-            })
     }
     fn try_place_ship(&self, ship: Ship, pos: IVec2, direction: Direction) -> PlacementResult {
         let top_left = pos;
