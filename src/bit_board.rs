@@ -59,6 +59,17 @@ impl<const N: usize> BitBoard<N> {
 pub struct PlacedBitShips<const N: usize> {
     pub placed_ships: [[BitBoard<N>; 256]; N],
 }
+impl PlacedBitShips<0> {
+    pub fn new(ship_counts: ShipCounts) -> &'static Self {
+        static LOOKUP: LazyLock<Vec<(ShipCounts, PlacedBitShips<0>)>> =
+            LazyLock::new(PlacedBitShips::gen_lookup);
+        &LOOKUP
+            .iter()
+            .find(|(cached_ship_count, _)| *cached_ship_count == ship_counts)
+            .unwrap()
+            .1
+    }
+}
 impl PlacedBitShips<1> {
     pub fn new(ship_counts: ShipCounts) -> &'static Self {
         static LOOKUP: LazyLock<Vec<(ShipCounts, PlacedBitShips<1>)>> =
@@ -123,7 +134,7 @@ impl<const N: usize> PlacedBitShips<N> {
     //
     fn gen_lookup() -> Vec<(ShipCounts, Self)> {
         ShipCounts::all_possible_ship_counts()
-            .filter(|ship_counts| ship_counts.total_ship_count() == N)
+            .filter(|ship_counts| ship_counts.total_ships() == N)
             .map(|ship_counts| (ship_counts, Self::gen_self(ship_counts)))
             .collect()
     }

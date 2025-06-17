@@ -17,7 +17,7 @@ use std::{
     iter::zip,
     simd::prelude::*,
 };
-const BIT_FIELD_CHUNKS: usize = 255;
+const BIT_FIELD_CHUNKS: usize = 127;
 
 #[derive(Debug, Clone)]
 pub struct CellShipCounts<const N: usize> {
@@ -55,13 +55,17 @@ impl<const N: usize> CellShipCounts<N> {
             .unwrap();
 
         // bit_adder_in_place(&mut self.bit_counts_total, &bit_sum_1023(bit_fields_to_sum));
-        bit_adder_in_place(&mut self.bit_counts_total, &bit_sum_255(bit_fields_to_sum));
+        bit_adder_in_place(&mut self.bit_counts_total, &bit_sum_127(bit_fields_to_sum));
+        // bit_adder_in_place(&mut self.bit_counts_total, &bit_sum_255(bit_fields_to_sum));
 
         self.bit_fields_to_sum
             .truncate(self.bit_fields_to_sum.len() - BIT_FIELD_CHUNKS);
     }
     #[inline(never)]
     pub fn sum_bit_counts(&mut self) {
+        if N == 0 {
+            return;
+        }
         let last_counts = self.ship_count_per_cell.last_mut().unwrap();
 
         for bit_index in 0..self.bit_counts_total.len() {
@@ -138,6 +142,11 @@ fn bit_sum_63(val: &[u64x4; 63]) -> [u64x4; 6] {
     let d = bit_sum_15(val[48..48 + 15].try_into().unwrap());
     let f = bit_adder_with_carry(c, d, val[15 + 32]);
     bit_adder_with_carry(e, f, val[31])
+}
+fn bit_sum_127(val: &[u64x4; 127]) -> [u64x4; 7] {
+    let a = bit_sum_63(val[0..63].try_into().unwrap());
+    let b = bit_sum_63(val[64..64 + 63].try_into().unwrap());
+    bit_adder_with_carry(a, b, val[63])
 }
 #[inline(always)]
 fn bit_sum_255(val: &[u64x4; 255]) -> [u64x4; 8] {

@@ -9,6 +9,8 @@ use core::iter::Iterator;
 use core::simd::u64x4;
 use std::fmt::Display;
 use std::fmt::Write;
+use std::hash::Hash;
+use std::mem::transmute;
 use std::ops::{Index, IndexMut};
 use std::simd::u64x2;
 
@@ -17,6 +19,14 @@ pub enum Direction {
     Horizontal = 0,
     Vertical = 1,
 }
+impl Direction {
+    pub fn to_ivec2(self) -> IVec2 {
+        match self {
+            Direction::Horizontal => ivec2(1, 0),
+            Direction::Vertical => ivec2(0, 1),
+        }
+    }
+}
 
 enum PlacementResult {
     NotAllowed,
@@ -24,11 +34,26 @@ enum PlacementResult {
     PartialShipHitCovering(ShipPlacement),
     FullShipHitCovering(ShipPlacement),
 }
+#[derive(Clone)]
 pub struct ShipPlacement {
     pub ship: Ship,
     pub pos: IVec2,
-    pub placed_board: Board,
+    pub board: Board,
     pub direction: Direction,
+}
+impl ShipPlacement {
+    pub fn contains_shot(&self, shot_pos: IVec2) -> bool {
+        let lower_bound = self.pos;
+        let upper_bound =
+            self.pos + IVec2::splat(self.ship.length() as i32 - 1) * self.direction.to_ivec2(); // - 1, because upper bound has to be inclusive
+        let contains_shot = shot_pos.x >= lower_bound.x
+            && shot_pos.x <= upper_bound.x
+            && shot_pos.y >= lower_bound.y
+            && shot_pos.y <= upper_bound.y;
+
+        assert_eq!(self.board[shot_pos] == Cell::Ship, contains_shot,);
+        contains_shot
+    }
 }
 pub struct AllShipPlacment {
     pub partial_ship_hit_covering: Vec<ShipPlacement>,
@@ -49,7 +74,7 @@ impl AllShipPlacment {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[repr(align(128))]
 pub struct Board {
     pub cells: [Cell; BOARD_SIZE],
@@ -70,7 +95,7 @@ impl Board {
                 // _ => Cell::Water,
                 Cell::Ship | Cell::Protected => Cell::Protected,
                 // Cell::ShipHit | Cell::Ship | Cell::Protected => Cell::Protected,
-                Cell::ShipHit => panic!("not covered ship hit in bitboard"),
+                Cell::ShipHit => panic!("not covered ship hit in bitboard: {self}"),
                 Cell::Water => Cell::Water,
             };
         }
@@ -115,7 +140,7 @@ impl Board {
     pub fn to_u64x2(&self, cell_type_to_one: Cell) -> u64x2 {
         let mut val = 0u128;
 
-        for i in 0..u128::BITS as usize {
+        for i in 0..BOARD_SIZE {
             let bit_index = i;
 
             if cell_type_to_one == self.cells[i] {
@@ -158,12 +183,32 @@ impl Board {
                 }
             }
         }
+        if all_ship_placement.full_ship_hit_covering.len() > 1 {
+            // println!("before: {self}");
+            // for covering in &all_ship_placement.full_ship_hit_covering {
+            //     println!("covering: {}", covering.placed_board);
+            // }
+        }
+        // assert!(all_ship_placement.full_ship_hit_covering.len() <= 1);
         all_ship_placement
-            .full_ship_hit_covering
-            .dedup_by_key(|a| (a.pos, a.ship, a.direction));
-
-        assert!(all_ship_placement.full_ship_hit_covering.len() <= 1);
-        all_ship_placement
+    }
+    pub fn is_possible(&self, ship_counts: &ShipCounts) -> bool {
+        if !self.has_ship_hits() {
+            return true;
+        }
+        let all_ship_placements = self.all_ship_placements(ship_counts);
+        all_ship_placements
+            .partial_ship_hit_covering
+            .into_iter()
+            // all_ship_placements
+            //     .full_ship_hit_covering
+            //     .into_iter()
+            //     .chain(all_ship_placements.partial_ship_hit_covering)
+            .any(|placement| {
+                placement
+                    .board
+                    .is_possible(&ship_counts.remove_placed_ship(placement.ship))
+            })
     }
     fn try_place_ship(&self, ship: Ship, pos: IVec2, direction: Direction) -> PlacementResult {
         let top_left = pos;
@@ -207,7 +252,7 @@ impl Board {
             ship,
             pos,
             direction,
-            placed_board: this,
+            board: this,
         };
 
         if cell_count_ship[Cell::ShipHit] == 0 {
@@ -240,6 +285,10 @@ impl Board {
     pub fn to_bitboard<const N: usize>(&self, ship_counts: ShipCounts) -> BitBoard<N> {
         BitBoard::new(self, ship_counts)
     }
+
+    pub fn has_ship_hits(&self) -> bool {
+        self.cells.contains(&Cell::ShipHit)
+    }
 }
 impl Index<IVec2> for Board {
     type Output = Cell;
@@ -264,5 +313,12 @@ impl Display for Board {
             f.write_char('\n')?;
         }
         Ok(())
+    }
+}
+
+impl Hash for Board {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let own_bytes: [u8; BOARD_SIZE] = unsafe { transmute(self.clone()) };
+        state.write(&own_bytes[0..SIZE * SIZE]);
     }
 }

@@ -41,7 +41,7 @@ impl ShipCounts {
                 std::iter::repeat_n(unsafe { *SHIPS.get_unchecked(ship_index) }, *ship_count)
             })
     }
-    pub fn total_ship_count(&self) -> usize {
+    pub fn total_ships(&self) -> usize {
         self.counts.into_iter().sum::<usize>()
     }
     pub fn remove_placed_ship(&self, placed_ship: Ship) -> Self {

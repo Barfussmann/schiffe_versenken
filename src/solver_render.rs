@@ -10,7 +10,7 @@ pub struct SolverRender {
 }
 impl SolverRender {
     pub fn new(mut solver: DynSolver) -> Self {
-        solver.calculate_arrangements();
+        solver.calculate_arrangements(false);
         Self {
             solver,
             exit: false,
@@ -35,19 +35,22 @@ impl SolverRender {
                 match key_event.code {
                     event::KeyCode::Char('q') => self.exit = true,
                     event::KeyCode::Char('u') => {
-                        self.solver.calculate_arrangements();
+                        self.solver.calculate_arrangements(false);
                     }
                     event::KeyCode::Char('i') => {
-                        self.solver = self.solver.shoot(self.solver.get_best_cell())[0].clone();
-                        self.solver.calculate_arrangements();
+                        self.solver =
+                            self.solver.shoot(self.solver.get_best_cell().unwrap())[0].clone();
+                        self.solver.calculate_arrangements(false);
                     }
                     event::KeyCode::Char('a') => {
-                        self.solver = self.solver.shoot(self.solver.get_best_cell())[1].clone();
-                        self.solver.calculate_arrangements();
+                        self.solver =
+                            self.solver.shoot(self.solver.get_best_cell().unwrap())[1].clone();
+                        self.solver.calculate_arrangements(false);
                     }
                     event::KeyCode::Char('e') => {
-                        self.solver = self.solver.shoot(self.solver.get_best_cell())[2].clone();
-                        self.solver.calculate_arrangements();
+                        self.solver =
+                            self.solver.shoot(self.solver.get_best_cell().unwrap())[2].clone();
+                        self.solver.calculate_arrangements(false);
                     }
                     _ => (),
                 }
