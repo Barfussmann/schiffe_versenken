@@ -28,6 +28,43 @@ pub enum DynSolverEnum {
     Solver4(Solver<4>),
     Solver5(Solver<5>),
 }
+impl DynSolverEnum {
+    pub fn new(ship_counts: ShipCounts, board: &Board) -> DynSolverEnum {
+        match ship_counts.total_ships() {
+            0 => DynSolverEnum::Solver0(Solver {
+                placed_bit_ships: PlacedBitShips::<0>::new(ship_counts),
+                bit_board: board.to_bitboard(ship_counts),
+                cell_hit_count: Box::new(CellHitCount::new()),
+            }),
+            1 => DynSolverEnum::Solver1(Solver {
+                placed_bit_ships: PlacedBitShips::<1>::new(ship_counts),
+                bit_board: board.to_bitboard(ship_counts),
+                cell_hit_count: Box::new(CellHitCount::new()),
+            }),
+            2 => DynSolverEnum::Solver2(Solver {
+                placed_bit_ships: PlacedBitShips::<2>::new(ship_counts),
+                bit_board: board.to_bitboard(ship_counts),
+                cell_hit_count: Box::new(CellHitCount::new()),
+            }),
+            3 => DynSolverEnum::Solver3(Solver {
+                placed_bit_ships: PlacedBitShips::<3>::new(ship_counts),
+                bit_board: board.to_bitboard(ship_counts),
+                cell_hit_count: Box::new(CellHitCount::new()),
+            }),
+            4 => DynSolverEnum::Solver4(Solver {
+                placed_bit_ships: PlacedBitShips::<4>::new(ship_counts),
+                bit_board: board.to_bitboard(ship_counts),
+                cell_hit_count: Box::new(CellHitCount::new()),
+            }),
+            5 => DynSolverEnum::Solver5(Solver {
+                placed_bit_ships: PlacedBitShips::<5>::new(ship_counts),
+                bit_board: board.to_bitboard(ship_counts),
+                cell_hit_count: Box::new(CellHitCount::new()),
+            }),
+            ship_count => panic!("Shipcount not supported. is {ship_count}, ship: {board}"),
+        }
+    }
+}
 #[derive(Clone)]
 pub struct DynSolver {
     // pub dyn_solver: DynSolverEnum,
@@ -46,7 +83,7 @@ impl DynSolver {
         }
     }
     fn gen_dyn_solver(&self) -> DynSolverEnum {
-        Solver::<0>::new(self.ship_counts, &self.board)
+        DynSolverEnum::new(self.ship_counts, &self.board)
     }
     /// returns the arrangement count
     #[rustfmt::skip]
@@ -241,47 +278,6 @@ pub struct Solver<const N: usize> {
 }
 
 impl<const N: usize> Solver<N> {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(ship_counts: ShipCounts, board: &Board) -> DynSolverEnum {
-        match ship_counts.total_ships() {
-            0 => DynSolverEnum::Solver0(Solver {
-                placed_bit_ships: PlacedBitShips::<0>::new(ship_counts),
-                bit_board: board.to_bitboard(ship_counts),
-                cell_hit_count: Box::new(CellHitCount::new()),
-            }),
-            1 => DynSolverEnum::Solver1(Solver {
-                placed_bit_ships: PlacedBitShips::<1>::new(ship_counts),
-                bit_board: board.to_bitboard(ship_counts),
-                cell_hit_count: Box::new(CellHitCount::new()),
-            }),
-            2 => DynSolverEnum::Solver2(Solver {
-                placed_bit_ships: PlacedBitShips::<2>::new(ship_counts),
-                bit_board: board.to_bitboard(ship_counts),
-                cell_hit_count: Box::new(CellHitCount::new()),
-            }),
-            3 => DynSolverEnum::Solver3(Solver {
-                placed_bit_ships: PlacedBitShips::<3>::new(ship_counts),
-                bit_board: board.to_bitboard(ship_counts),
-                cell_hit_count: Box::new(CellHitCount::new()),
-            }),
-            4 => DynSolverEnum::Solver4(Solver {
-                placed_bit_ships: PlacedBitShips::<4>::new(ship_counts),
-                bit_board: board.to_bitboard(ship_counts),
-                cell_hit_count: Box::new(CellHitCount::new()),
-            }),
-            5 => DynSolverEnum::Solver5(Solver {
-                placed_bit_ships: PlacedBitShips::<5>::new(ship_counts),
-                bit_board: board.to_bitboard(ship_counts),
-                cell_hit_count: Box::new(CellHitCount::new()),
-            }),
-            ship_count => panic!("Shipcount not supported. is {ship_count}, ship: {board}"),
-        }
-        // Solver {
-        //     placed_bit_ships: Box::new(PlacedBitShips::new(ship_counts)),
-        //     bit_board: board.to_bitboard(ship_counts),
-        //     cell_hit_count: Box::new(CellHitCount::new()),
-        // }
-    }
     /// returns the count of arrangement count
     fn step(&mut self, ship_counts: &ShipCounts, cell_count_hit_sum: &mut CellHitCountSum) {
         if N == 0 {

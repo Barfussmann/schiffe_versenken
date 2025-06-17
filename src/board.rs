@@ -92,17 +92,14 @@ impl Board {
         let mut this = self.clone();
         for cell in &mut this.cells {
             *cell = match cell {
-                // Cell::Ship => Cell::Protected,
-                // _ => Cell::Water,
                 Cell::Ship | Cell::Protected => Cell::Protected,
-                // Cell::ShipHit | Cell::Ship | Cell::Protected => Cell::Protected,
                 Cell::ShipHit => panic!("not covered ship hit in bitboard: {self}"),
                 Cell::Water => Cell::Water,
             };
         }
         this
     }
-    pub fn shifted_protected<const S: Ship>(&self) -> u64x4 {
+    pub fn shift_protected<const S: Ship>(&self) -> u64x4 {
         let x_shifted = self.multishift(0..S.length()).to_u64x2(Cell::Protected);
         let y_shifted = self
             .multishift((0..S.length()).map(|i| i * SIZE))
@@ -151,7 +148,7 @@ impl Board {
         u64x2::from_array([val as u64, (val >> 64) as u64])
     }
 
-    pub fn const_place_ship(&mut self, x: usize, y: usize, direction: Direction, ship: Ship) {
+    pub fn place_ship(&mut self, x: usize, y: usize, direction: Direction, ship: Ship) {
         let offset = match direction {
             Direction::Horizontal => ivec2(ship.length() as i32, 1),
             Direction::Vertical => ivec2(1, ship.length() as i32),
@@ -161,10 +158,7 @@ impl Board {
             *cell = Cell::Protected
         });
 
-        let ship_offset = match direction {
-            Direction::Horizontal => ivec2(ship.length() as i32, 0),
-            Direction::Vertical => ivec2(0, ship.length() as i32),
-        };
+        let ship_offset = direction.to_ivec2() * ship.length() as i32;
         self.for_each_rect_cells_mut(pos, pos + ship_offset, |cell| *cell = Cell::Ship);
     }
     pub fn all_ship_placements_hit_position(
@@ -178,7 +172,6 @@ impl Board {
         };
         for ship in ship_counts.iter_ships() {
             for offset in 0..ship.length() {
-                // for dir in Direction::ALL {
                 let pos = hit_position - Direction::Horizontal.to_ivec2() * offset as i32;
                 if pos.x >= 0 && pos.x as usize + ship.length() <= SIZE {
                     let placement_result = self.try_place_ship(ship, pos, Direction::Horizontal);
@@ -196,11 +189,7 @@ impl Board {
     fn try_place_ship(&self, ship: Ship, pos: IVec2, direction: Direction) -> PlacementResult {
         let top_left = pos;
 
-        let bottom_right = pos
-            + match direction {
-                Direction::Horizontal => ivec2(ship.length() as i32 - 1, 0),
-                Direction::Vertical => ivec2(0, ship.length() as i32 - 1),
-            };
+        let bottom_right = pos + direction.to_ivec2() * (ship.length() - 1) as i32;
 
         let protected_top_left = top_left - IVec2::ONE;
         let protected_bottom_right = bottom_right + IVec2::ONE;

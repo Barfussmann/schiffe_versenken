@@ -18,10 +18,10 @@ impl<const N: usize> BitBoard<N> {
     pub fn new(board: &Board, ship_counts: ShipCounts) -> Self {
         let protected = board.to_protected();
 
-        let pro_2 = protected.shifted_protected::<{ Ship::new(2) }>();
-        let pro_3 = protected.shifted_protected::<{ Ship::new(3) }>();
-        let pro_4 = protected.shifted_protected::<{ Ship::new(4) }>();
-        let pro_5 = protected.shifted_protected::<{ Ship::new(5) }>();
+        let pro_2 = protected.shift_protected::<{ Ship::new(2) }>();
+        let pro_3 = protected.shift_protected::<{ Ship::new(3) }>();
+        let pro_4 = protected.shift_protected::<{ Ship::new(4) }>();
+        let pro_5 = protected.shift_protected::<{ Ship::new(5) }>();
 
         let protected: Vec<_> = ship_counts
             .counts()
@@ -149,7 +149,7 @@ impl<const N: usize> PlacedBitShips<N> {
                             for x in 0..SIZE {
                                 let bit_board_index = dir as usize * 128 + (y * 10 + x);
                                 let mut board = Board::new();
-                                board.const_place_ship(x, y, dir, ship);
+                                board.place_ship(x, y, dir, ship);
 
                                 placed_ships[bit_board_index] = BitBoard::new(&board, ship_counts);
                             }
