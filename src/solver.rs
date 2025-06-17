@@ -1,3 +1,5 @@
+use std::pin::pin;
+
 use glam::IVec2;
 use num_format::ToFormattedString;
 use ratatui::{
@@ -8,6 +10,7 @@ use ratatui::{
     text::Line,
     widgets::{Block, Paragraph, Widget},
 };
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
     SIZE,
@@ -34,32 +37,26 @@ impl DynSolverEnum {
             0 => DynSolverEnum::Solver0(Solver {
                 placed_bit_ships: PlacedBitShips::<0>::new(ship_counts),
                 bit_board: board.to_bitboard(ship_counts),
-                cell_hit_count: Box::new(CellHitCount::new()),
             }),
             1 => DynSolverEnum::Solver1(Solver {
                 placed_bit_ships: PlacedBitShips::<1>::new(ship_counts),
                 bit_board: board.to_bitboard(ship_counts),
-                cell_hit_count: Box::new(CellHitCount::new()),
             }),
             2 => DynSolverEnum::Solver2(Solver {
                 placed_bit_ships: PlacedBitShips::<2>::new(ship_counts),
                 bit_board: board.to_bitboard(ship_counts),
-                cell_hit_count: Box::new(CellHitCount::new()),
             }),
             3 => DynSolverEnum::Solver3(Solver {
                 placed_bit_ships: PlacedBitShips::<3>::new(ship_counts),
                 bit_board: board.to_bitboard(ship_counts),
-                cell_hit_count: Box::new(CellHitCount::new()),
             }),
             4 => DynSolverEnum::Solver4(Solver {
                 placed_bit_ships: PlacedBitShips::<4>::new(ship_counts),
                 bit_board: board.to_bitboard(ship_counts),
-                cell_hit_count: Box::new(CellHitCount::new()),
             }),
             5 => DynSolverEnum::Solver5(Solver {
                 placed_bit_ships: PlacedBitShips::<5>::new(ship_counts),
                 bit_board: board.to_bitboard(ship_counts),
-                cell_hit_count: Box::new(CellHitCount::new()),
             }),
             ship_count => panic!("Shipcount not supported. is {ship_count}, ship: {board}"),
         }
@@ -67,7 +64,6 @@ impl DynSolverEnum {
 }
 #[derive(Clone)]
 pub struct DynSolver {
-    // pub dyn_solver: DynSolverEnum,
     pub board: Board,
     pub cell_hit_count_sum: CellHitCountSum,
     pub ship_counts: ShipCounts,
@@ -100,7 +96,7 @@ impl DynSolver {
     pub fn calculate_arrangements_with_print(&mut self) -> u64 {
         let start_time = std::time::Instant::now();
 
-        let total_arrangements = self.calculate_arrangements(false);
+        let total_arrangements = self.calculate_arrangements();
         let elapsed_time = start_time.elapsed();
         let boards_per_second = (total_arrangements as f64 / elapsed_time.as_secs_f64()) as u64;
         println!(
@@ -119,7 +115,7 @@ impl DynSolver {
     }
     #[expect(clippy::collapsible_if)]
     pub fn shoot(&self, shot: IVec2) -> Vec<Self> {
-        let miss_allowed = true;
+        let mut miss_allowed = true;
         let mut hit_allowed = true;
 
         assert!(self.board[shot] == Cell::Water);
@@ -134,19 +130,13 @@ impl DynSolver {
                 hit_allowed = hit_placements.full_ship_hit_covering.is_empty();
             }
             // let own_ship_placments = self.board.all_ship_placements(&self.ship_counts);
-            // if !own_ship_placments.partial_ship_hit_covering.is_empty() {
-            //     miss_allowed = own_ship_placments
+            // if !hit_placements.partial_ship_hit_covering.is_empty() {
+            //     miss_allowed = hit_placements
             //         .partial_ship_hit_covering
             //         .iter()
-            //         .any(|placment| placment.board[shoot] == Cell::Protected);
+            //         .any(|placment| placment.board[shot] == Cell::Protected);
             // }
         }
-
-        let full_ship_hit_coverings = hit_placements
-            .full_ship_hit_covering
-            .into_iter()
-            .filter(|ship_placement| ship_placement.contains_shot(shot))
-            .map(|ship_placement| self.place_ship(&ship_placement));
 
         let mut miss_board = self.clone();
         miss_board.board[shot] = Cell::Protected;
@@ -167,64 +157,110 @@ impl DynSolver {
                 shot,
             ));
         }
-        sub_solvers.extend(full_ship_hit_coverings);
-
-        // sub_solvers.retain(|solver| solver.board.is_possible(&solver.ship_counts));
+        sub_solvers.extend(
+            hit_placements
+                .full_ship_hit_covering
+                .into_iter()
+                .map(|ship_placement| self.place_ship(&ship_placement)),
+        );
 
         sub_solvers
     }
-
-    pub fn calculate_arrangements(&mut self, print: bool) -> u64 {
-        if print {
-            println!("Board: {}", self.board);
+    pub fn calculate_arrangements_in_depth(&mut self, depth: usize) -> u64 {
+        if depth == 0 {
+            return self.calculate_arrangements();
         }
+        self.calculate_arrangements();
+        let Some(shot) = self.get_best_cell() else {
+            // println!("board: {}", self.board);
+            return 0;
+        };
+        self.shoot(shot)
+            .into_par_iter()
+            .map(|mut solver| solver.calculate_arrangements_in_depth(depth - 1))
+            .sum()
+    }
+    fn iterate_all_ship_placement_sub_solvers(
+        self,
+        fun: &mut impl FnMut(DynSolver, ShipPlacement),
+    ) {
+        let first_hit_pos = self.get_first_hit_pos();
+        let all_ship_placements = self
+            .board
+            .all_ship_placements_hit_position(&self.ship_counts, first_hit_pos);
+        for ship_placement in all_ship_placements.partial_ship_hit_covering {
+            if !ship_placement.board.has_ship_hits() {
+                fun(self.place_ship(&ship_placement), ship_placement);
+            } else {
+                self.place_ship(&ship_placement)
+                    .iterate_all_ship_placement_sub_solvers(fun);
+            }
+        }
+    }
+    pub fn calculate_arrangements(&mut self) -> u64 {
         if !self.board.has_ship_hits() {
             self.step_solver();
             return self.cell_hit_count_sum.arrangements;
         }
 
+        self.clone().iterate_all_ship_placement_sub_solvers(
+            &mut |mut sub_solver, ship_placement| {
+                sub_solver.step_solver();
+                self.cell_hit_count_sum.add(&sub_solver.cell_hit_count_sum);
+                self.cell_hit_count_sum.add_single_placment(
+                    ship_placement,
+                    sub_solver.cell_hit_count_sum.arrangements,
+                );
+            },
+        );
+        self.cell_hit_count_sum.arrangements
+
+        // if !self.board.has_ship_hits() {
+        //     self.step_solver();
+        //     return self.cell_hit_count_sum.arrangements;
+        // }
+        // let first_hit_pos = self.get_first_hit_pos();
+        // let all_ship_placements = self
+        //     .board
+        //     .all_ship_placements_hit_position(&self.ship_counts, first_hit_pos);
+        // for ship_placement in all_ship_placements.partial_ship_hit_covering {
+        //     if !ship_placement.contains_shot(first_hit_pos) {
+        //         continue;
+        //     }
+
+        //     if ship_placement.board.has_ship_hits() {
+        //         let mut solver = self.place_ship(&ship_placement);
+        //         solver.calculate_arrangements();
+        //         self.cell_hit_count_sum.add(&solver.cell_hit_count_sum);
+        //         self.cell_hit_count_sum.add_single_placment(
+        //             ship_placement.clone(),
+        //             solver.cell_hit_count_sum.arrangements,
+        //         );
+
+        //         continue;
+        //     }
+        //     let mut solver = self.place_ship(&ship_placement);
+        //     solver.step_solver();
+        //     self.cell_hit_count_sum.add(&solver.cell_hit_count_sum);
+        //     self.cell_hit_count_sum.add_single_placment(
+        //         ship_placement.clone(),
+        //         solver.cell_hit_count_sum.arrangements,
+        //     );
+        // }
+        // self.cell_hit_count_sum.arrangements
+    }
+
+    fn get_first_hit_pos(&self) -> IVec2 {
         let first_hit_index = self
             .board
             .cells
             .iter()
             .position(|cell| *cell == Cell::ShipHit)
             .unwrap();
-        let firt_hit_pos = IVec2::new(
+        IVec2::new(
             (first_hit_index % SIZE) as i32,
             (first_hit_index / SIZE) as i32,
-        );
-        let all_ship_placements = self
-            .board
-            .all_ship_placements_hit_position(&self.ship_counts, firt_hit_pos);
-        if print {
-            dbg!(all_ship_placements.partial_ship_hit_covering.len());
-            dbg!(all_ship_placements.full_ship_hit_covering.len());
-        }
-        for ship_placement in all_ship_placements.partial_ship_hit_covering {
-            if !ship_placement.contains_shot(firt_hit_pos) {
-                continue;
-            }
-
-            if ship_placement.board.has_ship_hits() {
-                let mut solver = self.place_ship(&ship_placement);
-                solver.calculate_arrangements(print);
-                self.cell_hit_count_sum.add(&solver.cell_hit_count_sum);
-                self.cell_hit_count_sum.add_single_placment(
-                    ship_placement.clone(),
-                    solver.cell_hit_count_sum.arrangements,
-                );
-
-                continue;
-            }
-            let mut solver = self.place_ship(&ship_placement);
-            solver.step_solver();
-            self.cell_hit_count_sum.add(&solver.cell_hit_count_sum);
-            self.cell_hit_count_sum.add_single_placment(
-                ship_placement.clone(),
-                solver.cell_hit_count_sum.arrangements,
-            );
-        }
-        self.cell_hit_count_sum.arrangements
+        )
     }
 
     pub fn get_best_cell(&self) -> Option<IVec2> {
@@ -274,7 +310,7 @@ impl Widget for &DynSolver {
 pub struct Solver<const N: usize> {
     pub placed_bit_ships: &'static PlacedBitShips<N>,
     bit_board: BitBoard<N>,
-    pub cell_hit_count: Box<CellHitCount<N>>,
+    // pub cell_hit_count: Box<>,
 }
 
 impl<const N: usize> Solver<N> {
@@ -286,17 +322,21 @@ impl<const N: usize> Solver<N> {
             // when there are no ships left there is only one possibility the current one
             return;
         }
-        cell_count_hit_sum.arrangements = self.place_ship_recursive::<0>(self.bit_board) as u64;
-        self.cell_hit_count
-            .sum_cell_counts(ship_counts, cell_count_hit_sum);
+        let mut cell_hit_count = CellHitCount::<N>::new();
+        cell_count_hit_sum.arrangements =
+            self.place_ship_recursive::<0>(self.bit_board, &mut cell_hit_count) as u64;
+        cell_hit_count.sum_cell_counts(ship_counts, cell_count_hit_sum);
     }
 
     #[inline(always)]
-    fn place_ship_recursive<const INDEX: usize>(&mut self, board: BitBoard<N>) -> u32 {
+    fn place_ship_recursive<const INDEX: usize>(
+        &mut self,
+        board: BitBoard<N>,
+        cell_hit_count: &mut CellHitCount<N>,
+    ) -> u32 {
         // directly add the the positions of all possible placements of the last ship
         if INDEX + 1 == N {
-            return self
-                .cell_hit_count
+            return cell_hit_count
                 .ship_cell_counts
                 .add_possible_ship_positions(board.allowable::<INDEX>());
             // return self.board_counts.ship_cell_counts.counts_per_ship_position[INDEX]
@@ -308,15 +348,15 @@ impl<const N: usize> Solver<N> {
             let board = board.place_ship::<INDEX>(ship_pos, self.placed_bit_ships);
 
             let additional_configurations = match INDEX {
-                0 => self.place_ship_recursive::<1>(board),
-                1 => self.place_ship_recursive::<2>(board),
-                2 => self.place_ship_recursive::<3>(board),
-                3 => self.place_ship_recursive::<4>(board),
-                4 => self.place_ship_recursive::<5>(board),
+                0 => self.place_ship_recursive::<1>(board, cell_hit_count),
+                1 => self.place_ship_recursive::<2>(board, cell_hit_count),
+                2 => self.place_ship_recursive::<3>(board, cell_hit_count),
+                3 => self.place_ship_recursive::<4>(board, cell_hit_count),
+                4 => self.place_ship_recursive::<5>(board, cell_hit_count),
                 _ => unreachable!(),
             };
             // addes the currently placed ship with the count of sub-configurations
-            self.cell_hit_count.ship_cell_counts.ship_count_per_cell[INDEX]
+            cell_hit_count.ship_cell_counts.ship_count_per_cell[INDEX]
                 .add_single_ship(ship_pos, additional_configurations);
 
             configurations += additional_configurations;
@@ -324,7 +364,7 @@ impl<const N: usize> Solver<N> {
 
         // flush the cell counts to prevent overflow
         if INDEX + 2 == N {
-            self.cell_hit_count.ship_cell_counts.sum_last_ship();
+            cell_hit_count.ship_cell_counts.sum_last_ship();
         }
         configurations
     }

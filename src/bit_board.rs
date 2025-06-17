@@ -1,6 +1,8 @@
 use core::simd::u64x4;
 use std::sync::LazyLock;
 
+use arrayvec::ArrayVec;
+
 use crate::ship::{Ship, ShipCounts};
 use crate::{
     SIZE,
@@ -17,21 +19,23 @@ impl<const N: usize> BitBoard<N> {
     }
     pub fn new(board: &Board, ship_counts: ShipCounts) -> Self {
         let protected = board.to_protected();
+        let mut protected_vec: ArrayVec<u64x4, N> = ArrayVec::new();
 
-        let pro_2 = protected.shift_protected::<{ Ship::new(2) }>();
-        let pro_3 = protected.shift_protected::<{ Ship::new(3) }>();
-        let pro_4 = protected.shift_protected::<{ Ship::new(4) }>();
-        let pro_5 = protected.shift_protected::<{ Ship::new(5) }>();
-
-        let protected: Vec<_> = ship_counts
-            .counts()
-            .iter()
-            .zip([pro_5, pro_4, pro_3, pro_2])
-            .flat_map(|(ship_count, ship)| std::iter::repeat_n(ship, *ship_count))
-            .collect();
+        for _ in 0..ship_counts.counts()[Ship::new(5).index()] {
+            protected_vec.push(protected.shift_protected::<{ Ship::new(5) }>());
+        }
+        for _ in 0..ship_counts.counts()[Ship::new(4).index()] {
+            protected_vec.push(protected.shift_protected::<{ Ship::new(4) }>());
+        }
+        for _ in 0..ship_counts.counts()[Ship::new(3).index()] {
+            protected_vec.push(protected.shift_protected::<{ Ship::new(3) }>());
+        }
+        for _ in 0..ship_counts.counts()[Ship::new(2).index()] {
+            protected_vec.push(protected.shift_protected::<{ Ship::new(2) }>());
+        }
 
         Self {
-            protected: protected.try_into().unwrap(),
+            protected: protected_vec.as_slice().try_into().unwrap(),
         }
     }
     #[must_use]

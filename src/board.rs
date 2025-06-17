@@ -5,14 +5,12 @@ use crate::utils::rect_iter;
 use crate::{BOARD_SIZE, SIZE};
 use glam::{IVec2, Vec2Swizzles, ivec2};
 
-use core::iter::Iterator;
-use core::simd::u64x4;
-use std::fmt::Display;
-use std::fmt::Write;
-use std::hash::Hash;
-use std::mem::transmute;
-use std::ops::{Index, IndexMut};
-use std::simd::u64x2;
+use std::simd::u64x4;
+use std::{
+    fmt::{Display, Write},
+    ops::{Index, IndexMut},
+    simd::u64x2,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
@@ -75,7 +73,7 @@ impl AllShipPlacment {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 #[repr(align(128))]
 pub struct Board {
     pub cells: [Cell; BOARD_SIZE],
@@ -92,8 +90,8 @@ impl Board {
         let mut this = self.clone();
         for cell in &mut this.cells {
             *cell = match cell {
-                Cell::Ship | Cell::Protected => Cell::Protected,
-                Cell::ShipHit => panic!("not covered ship hit in bitboard: {self}"),
+                Cell::Ship | Cell::Protected | Cell::ShipHit => Cell::Protected,
+                // Cell::ShipHit => panic!("not covered ship hit in bitboard: {self}"),
                 Cell::Water => Cell::Water,
             };
         }
@@ -285,12 +283,5 @@ impl Display for Board {
             f.write_char('\n')?;
         }
         Ok(())
-    }
-}
-
-impl Hash for Board {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        let own_bytes: [u8; BOARD_SIZE] = unsafe { transmute(self.clone()) };
-        state.write(&own_bytes[0..SIZE * SIZE]);
     }
 }

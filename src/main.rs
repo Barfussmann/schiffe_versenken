@@ -20,15 +20,15 @@
 // #![allow(dead_code, clippy::new_without_default, unused, incomplete_features)]
 // #![warn(clippy::pedantic)]
 
+#[allow(unused_imports)]
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use board::Board;
 use glam::IVec2;
 #[allow(unused_imports)]
 use num_format::{Locale, ToFormattedString};
-use rayon::iter::ParallelDrainRange;
 #[allow(unused_imports)]
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelDrainRange, ParallelIterator};
 
 use crate::{ship::ShipCounts, solver::DynSolver};
 
@@ -56,12 +56,22 @@ fn main() {
     //     ratatui::restore();
     // }
 
+    let mut solver = DynSolver::new(ShipCounts::new([1, 1, 1, 1]), Board::new(), IVec2::ZERO);
+    let depth = 70;
+    let start_time = std::time::Instant::now();
+    let total_arrangements = solver.calculate_arrangements_in_depth(depth);
+    println!(
+        "{depth:>2}: total_arrangements: {:>12}, in: {:>8.1?}",
+        total_arrangements.to_formatted_string(&Locale::en),
+        start_time.elapsed(),
+    );
+
     let mut solvers = vec![DynSolver::new(
         ShipCounts::new([1, 1, 1, 1]),
         Board::new(),
         IVec2::ZERO,
     )];
-    for iteration in 0..20 {
+    for iteration in 0..21 {
         let start_time = std::time::Instant::now();
         let total_arrangements = AtomicU64::new(0);
         solvers = solvers
@@ -70,13 +80,13 @@ fn main() {
                 if solver.ship_counts.total_ships() == 0 {
                     return Vec::new();
                 }
-                let own_arrangements = solver.calculate_arrangements(false);
+                let own_arrangements = solver.calculate_arrangements();
                 total_arrangements.fetch_add(own_arrangements, Ordering::Relaxed);
                 if let Some(best_cell) = solver.get_best_cell() {
                     let mut sub_solvers = solver.shoot(best_cell);
                     let sub_arrangements = sub_solvers
                         .iter_mut()
-                        .map(|solver| solver.clone().calculate_arrangements(false))
+                        .map(|solver| solver.clone().calculate_arrangements())
                         .sum::<u64>();
 
                     if sub_arrangements != own_arrangements {
@@ -93,7 +103,7 @@ fn main() {
                             println!("Sub Board {}", sub_board.board);
                         }
                         sub_solvers.iter_mut().for_each(|solver| {
-                            solver.clone().calculate_arrangements(true);
+                            solver.clone().calculate_arrangements();
                         });
                         panic!()
                     }
@@ -101,7 +111,6 @@ fn main() {
                     return sub_solvers;
                 }
                 Vec::new()
-                // new_solvers.extend(solver.shoot(solver.get_best_cell()));
             })
             .collect::<Vec<_>>();
         println!(
