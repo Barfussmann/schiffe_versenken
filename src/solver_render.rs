@@ -35,19 +35,16 @@ impl SolverRender {
                 match key_event.code {
                     event::KeyCode::Char('q') => self.exit = true,
                     event::KeyCode::Char('u') => {
-                        self.solver.calculate_arrangements();
-                    }
-                    event::KeyCode::Char('i') => {
                         self.solver =
                             self.solver.shoot(self.solver.get_best_cell().unwrap())[0].clone();
                         self.solver.calculate_arrangements();
                     }
-                    event::KeyCode::Char('a') => {
+                    event::KeyCode::Char('i') => {
                         self.solver =
                             self.solver.shoot(self.solver.get_best_cell().unwrap())[1].clone();
                         self.solver.calculate_arrangements();
                     }
-                    event::KeyCode::Char('e') => {
+                    event::KeyCode::Char('a') => {
                         self.solver =
                             self.solver.shoot(self.solver.get_best_cell().unwrap())[2].clone();
                         self.solver.calculate_arrangements();

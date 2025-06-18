@@ -47,17 +47,19 @@ mod solver_stats;
 mod utils;
 
 fn main() {
-    // {
-    //     let mut terminal = ratatui::init();
-    //     let mut solver_render = solver_render::SolverRender::new(DynSolver::new(
-    //         ShipCounts::new([1, 1, 2, 1]),
-    //         Board::new(),
-    //     ));
-    //     solver_render.run(&mut terminal);
-    //     ratatui::restore();
-    // }
+    {
+        let mut terminal = ratatui::init();
+        let mut solver_render = solver_render::SolverRender::new(DynSolver::new(
+            ShipCounts::new([1, 1, 1, 1]),
+            Board::new(),
+            0,
+        ));
+        solver_render.run(&mut terminal);
+        ratatui::restore();
+    }
 
     let mut solver = DynSolver::new(ShipCounts::new([1, 1, 1, 1]), Board::new(), 0);
+    // let mut solver = DynSolver::new(ShipCounts::new([1, 1, 1, 1]), Board::new(), 0);
     let depth = 70;
     let start_time = std::time::Instant::now();
     let stats = solver.calculate_arrangements_in_depth(depth);

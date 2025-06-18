@@ -1,16 +1,10 @@
+use super::BOARD_SIZE;
+use super::SIZE;
 use crate::{
     board::{Direction, ShipPlacement},
     ship::ShipCounts,
 };
 use arrayvec::ArrayVec;
-use colorgrad::Gradient;
-use ratatui::{
-    style::{Color, Style, palette::material::BLACK},
-    text::{Line, Span, Text},
-};
-
-use super::BOARD_SIZE;
-use super::SIZE;
 use core::{convert::TryInto, simd::u64x4};
 use std::{
     fmt::{Display, Write},
@@ -204,27 +198,6 @@ impl CellHitCountSum {
             self.counts[start_index + offset * offset_mult] += count;
         }
     }
-    pub fn to_ratatui_text(&self) -> Text<'_> {
-        let max_val = *self.counts.iter().max().unwrap() as f32;
-
-        let color_grad = colorgrad::preset::rd_yl_gn();
-
-        Text::from_iter(self.counts.chunks(SIZE).take(SIZE).map(|row| {
-            Line::from_iter(row.iter().map(|count| {
-                let probability = *count as f32 / (self.arrangements as f32);
-                let color_scale = *count as f32 / max_val;
-                let rgba8 = color_grad.at(color_scale).to_rgba8();
-
-                Span::styled(
-                    format_args!("{:3.0}", probability * 1000.).to_string(),
-                    Style::default()
-                        .bg(Color::Rgb(rgba8[0], rgba8[1], rgba8[2]))
-                        .fg(BLACK),
-                )
-            }))
-        }))
-    }
-
     pub fn new() -> Self {
         Self {
             counts: [0; BOARD_SIZE],

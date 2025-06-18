@@ -1,11 +1,13 @@
-use glam::IVec2;
+use colorgrad::Gradient;
+use glam::{IVec2, ivec2};
 use num_format::ToFormattedString;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
     style::Stylize,
+    style::{Color, Style, palette::material::BLACK},
     symbols::border,
-    text::Line,
+    text::{Line, Span, Text},
     widgets::{Block, Paragraph, Widget},
 };
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -175,21 +177,28 @@ impl DynSolver {
         &mut self,
         depth: usize,
         solver_stats: &SolverStats,
-    ) {
+    ) -> u64 {
         self.calculate_arrangements();
         solver_stats.add_solver(self);
 
         if depth == 0 {
-            return;
+            return self.cell_hit_count_sum.arrangements;
         }
+        // if self.ship_counts.total_ships() == 1 {
+        //     return self.cell_hit_count_sum.arrangements;
+        // }
 
         let Some(shot) = self.get_best_cell() else {
             // println!("board: {}", self.board);
-            return;
+            return self.cell_hit_count_sum.arrangements;
         };
-        self.shoot(shot).into_par_iter().for_each(|mut solver| {
-            solver.calculate_arrangements_in_depth_inner(depth - 1, solver_stats)
-        })
+        let _sub_arrangements = self
+            .shoot(shot)
+            .into_par_iter()
+            .map(|mut solver| solver.calculate_arrangements_in_depth_inner(depth - 1, solver_stats))
+            .sum::<u64>();
+        // assert_eq!(self.cell_hit_count_sum.arrangements, sub_arrangements);
+        self.cell_hit_count_sum.arrangements
     }
     fn iterate_all_ship_placement_sub_solvers(
         self,
@@ -266,6 +275,43 @@ impl DynSolver {
     pub fn depth(&self) -> usize {
         self.depth
     }
+    fn to_ratatui_text(&self) -> Text<'_> {
+        let counts = &self.cell_hit_count_sum;
+        let max_val = *counts.counts.iter().max().unwrap() as f32;
+
+        let color_grad = colorgrad::preset::rd_yl_gn();
+
+        Text::from_iter(
+            counts
+                .counts
+                .chunks(SIZE)
+                .take(SIZE)
+                .enumerate()
+                .map(|(y, row)| {
+                    Line::from_iter(row.iter().enumerate().map(|(x, count)| {
+                        let probability = *count as f32 / (counts.arrangements as f32);
+                        let color_scale = *count as f32 / max_val;
+                        let rgba8 = color_grad.at(color_scale).to_rgba8();
+
+                        let cell = self.board[ivec2(x as i32, y as i32)];
+
+                        match cell {
+                            Cell::Water => Span::styled(
+                                format_args!("{:3.0}", probability * 1000.).to_string(),
+                                Style::default()
+                                    .bg(Color::Rgb(rgba8[0], rgba8[1], rgba8[2]))
+                                    .fg(BLACK),
+                            ),
+                            Cell::Protected => {
+                                Span::styled(" O ", Style::default().fg(Color::Green))
+                            }
+                            Cell::ShipHit => Span::styled(" X ", Style::default().fg(Color::Red)),
+                            Cell::Ship => Span::styled(" X ", Style::default().fg(Color::Green)),
+                        }
+                    }))
+                }),
+        )
+    }
 }
 impl Widget for &DynSolver {
     fn render(self, area: Rect, buf: &mut Buffer) {
@@ -276,7 +322,7 @@ impl Widget for &DynSolver {
             .title_bottom(instructions.centered())
             .border_set(border::THICK);
 
-        let probs = self.cell_hit_count_sum.to_ratatui_text();
+        let probs = self.to_ratatui_text();
 
         Paragraph::new(probs)
             .centered()
