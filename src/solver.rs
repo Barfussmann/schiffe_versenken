@@ -1,5 +1,3 @@
-use std::pin::pin;
-
 use glam::IVec2;
 use num_format::ToFormattedString;
 use ratatui::{
@@ -20,6 +18,7 @@ use crate::{
     board_counts::{CellHitCount, CellHitCountSum},
     cell::Cell,
     ship::ShipCounts,
+    solver_stats::SolverStats,
 };
 
 #[derive(Clone)]
@@ -67,15 +66,15 @@ pub struct DynSolver {
     pub board: Board,
     pub cell_hit_count_sum: CellHitCountSum,
     pub ship_counts: ShipCounts,
-    last_shot: IVec2,
+    depth: usize,
 }
 impl DynSolver {
-    pub fn new(ship_counts: ShipCounts, board: Board, last_shot: IVec2) -> Self {
+    pub fn new(ship_counts: ShipCounts, board: Board, depth: usize) -> Self {
         Self {
             board,
             ship_counts,
             cell_hit_count_sum: CellHitCountSum::new(),
-            last_shot,
+            depth,
         }
     }
     fn gen_dyn_solver(&self) -> DynSolverEnum {
@@ -110,12 +109,12 @@ impl DynSolver {
         DynSolver::new(
             self.ship_counts.remove_placed_ship(ship_placement.ship),
             ship_placement.board.clone(),
-            ship_placement.pos,
+            self.depth + 1,
         )
     }
     #[expect(clippy::collapsible_if)]
     pub fn shoot(&self, shot: IVec2) -> Vec<Self> {
-        let mut miss_allowed = true;
+        let miss_allowed = true;
         let mut hit_allowed = true;
 
         assert!(self.board[shot] == Cell::Water);
@@ -147,14 +146,14 @@ impl DynSolver {
             sub_solvers.push(DynSolver::new(
                 miss_board.ship_counts,
                 miss_board.board.clone(),
-                shot,
+                self.depth() + 1,
             ));
         }
         if hit_allowed {
             sub_solvers.push(DynSolver::new(
                 hit_board.ship_counts,
                 hit_board.board.clone(),
-                shot,
+                self.depth() + 1,
             ));
         }
         sub_solvers.extend(
@@ -166,19 +165,31 @@ impl DynSolver {
 
         sub_solvers
     }
-    pub fn calculate_arrangements_in_depth(&mut self, depth: usize) -> u64 {
-        if depth == 0 {
-            return self.calculate_arrangements();
-        }
+    pub fn calculate_arrangements_in_depth(&mut self, depth: usize) -> SolverStats {
+        let solver_stats = SolverStats::new();
+        self.calculate_arrangements_in_depth_inner(depth, &solver_stats);
+
+        solver_stats
+    }
+    pub fn calculate_arrangements_in_depth_inner(
+        &mut self,
+        depth: usize,
+        solver_stats: &SolverStats,
+    ) {
         self.calculate_arrangements();
+        solver_stats.add_solver(self);
+
+        if depth == 0 {
+            return;
+        }
+
         let Some(shot) = self.get_best_cell() else {
             // println!("board: {}", self.board);
-            return 0;
+            return;
         };
-        self.shoot(shot)
-            .into_par_iter()
-            .map(|mut solver| solver.calculate_arrangements_in_depth(depth - 1))
-            .sum()
+        self.shoot(shot).into_par_iter().for_each(|mut solver| {
+            solver.calculate_arrangements_in_depth_inner(depth - 1, solver_stats)
+        })
     }
     fn iterate_all_ship_placement_sub_solvers(
         self,
@@ -214,40 +225,6 @@ impl DynSolver {
             },
         );
         self.cell_hit_count_sum.arrangements
-
-        // if !self.board.has_ship_hits() {
-        //     self.step_solver();
-        //     return self.cell_hit_count_sum.arrangements;
-        // }
-        // let first_hit_pos = self.get_first_hit_pos();
-        // let all_ship_placements = self
-        //     .board
-        //     .all_ship_placements_hit_position(&self.ship_counts, first_hit_pos);
-        // for ship_placement in all_ship_placements.partial_ship_hit_covering {
-        //     if !ship_placement.contains_shot(first_hit_pos) {
-        //         continue;
-        //     }
-
-        //     if ship_placement.board.has_ship_hits() {
-        //         let mut solver = self.place_ship(&ship_placement);
-        //         solver.calculate_arrangements();
-        //         self.cell_hit_count_sum.add(&solver.cell_hit_count_sum);
-        //         self.cell_hit_count_sum.add_single_placment(
-        //             ship_placement.clone(),
-        //             solver.cell_hit_count_sum.arrangements,
-        //         );
-
-        //         continue;
-        //     }
-        //     let mut solver = self.place_ship(&ship_placement);
-        //     solver.step_solver();
-        //     self.cell_hit_count_sum.add(&solver.cell_hit_count_sum);
-        //     self.cell_hit_count_sum.add_single_placment(
-        //         ship_placement.clone(),
-        //         solver.cell_hit_count_sum.arrangements,
-        //     );
-        // }
-        // self.cell_hit_count_sum.arrangements
     }
 
     fn get_first_hit_pos(&self) -> IVec2 {
@@ -285,7 +262,9 @@ impl DynSolver {
             (max_index % SIZE) as i32,
             (max_index / SIZE) as i32,
         ))
-        // IVec2::new((max_index % SIZE) as i32, (max_index / SIZE) as i32)
+    }
+    pub fn depth(&self) -> usize {
+        self.depth
     }
 }
 impl Widget for &DynSolver {
