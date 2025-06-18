@@ -4,8 +4,7 @@ use num_format::ToFormattedString;
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::Stylize,
-    style::{Color, Style, palette::material::BLACK},
+    style::{Color, Style, Stylize, palette::material::BLACK},
     symbols::border,
     text::{Line, Span, Text},
     widgets::{Block, Paragraph, Widget},
@@ -168,9 +167,8 @@ impl DynSolver {
         sub_solvers
     }
     pub fn calculate_arrangements_in_depth(&mut self, depth: usize) -> SolverStats {
-        let solver_stats = SolverStats::new();
+        let solver_stats = SolverStats::new(self.depth());
         self.calculate_arrangements_in_depth_inner(depth, &solver_stats);
-
         solver_stats
     }
     pub fn calculate_arrangements_in_depth_inner(
@@ -322,9 +320,9 @@ impl Widget for &DynSolver {
             .title_bottom(instructions.centered())
             .border_set(border::THICK);
 
-        let probs = self.to_ratatui_text();
+        let probabilities = self.to_ratatui_text();
 
-        Paragraph::new(probs)
+        Paragraph::new(probabilities)
             .centered()
             .block(block)
             .render(area, buf);

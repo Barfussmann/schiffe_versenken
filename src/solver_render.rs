@@ -1,12 +1,15 @@
 use crossterm::event;
-use ratatui::DefaultTerminal;
+use ratatui::{
+    DefaultTerminal,
+    layout::{Constraint, Layout},
+};
 
-use crate::solver::DynSolver;
+use crate::{solver::DynSolver, solver_stats::SolverStats};
 
 pub struct SolverRender {
-    pub solver: DynSolver,
-
-    pub exit: bool,
+    solver: DynSolver,
+    exit: bool,
+    solver_stats: Option<SolverStats>,
 }
 impl SolverRender {
     pub fn new(mut solver: DynSolver) -> Self {
@@ -14,19 +17,30 @@ impl SolverRender {
         Self {
             solver,
             exit: false,
+            solver_stats: None,
         }
     }
 
     pub fn run(&mut self, terminal: &mut DefaultTerminal) {
         while !self.exit {
+            // self.solver.calculate_arrangements();
+            self.solver_stats = Some(self.solver.calculate_arrangements_in_depth(70));
             terminal.draw(|frame| self.draw(frame)).unwrap();
-            self.handle_events()
+            self.handle_events();
         }
     }
 
     #[rustfmt::skip]
     fn draw(&self, frame: &mut ratatui::Frame) {
-        frame.render_widget(&self.solver, frame.area());
+
+
+        let horizontal = Layout::horizontal([Constraint::Length(32), Constraint::Fill(1)]);
+        let [left, right] = horizontal.areas::<2>(frame.area())[..].try_into().unwrap();
+        frame.render_widget(&self.solver, left);
+
+        if let Some(stats) = &self.solver_stats {
+            frame.render_widget(stats, right);
+        }
     }
 
     fn handle_events(&mut self) {

@@ -50,7 +50,7 @@ fn main() {
     {
         let mut terminal = ratatui::init();
         let mut solver_render = solver_render::SolverRender::new(DynSolver::new(
-            ShipCounts::new([1, 1, 1, 1]),
+            ShipCounts::new([1, 0, 1, 1]),
             Board::new(),
             0,
         ));
